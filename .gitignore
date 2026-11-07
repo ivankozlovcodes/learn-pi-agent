@@ -1,14 +1,14 @@
-# 依赖与构建产物
+# Dependencies and build output
 node_modules/
 dist/
 *.tsbuildinfo
 
-# 系统与编辑器
+# OS and editor files
 .DS_Store
 .idea/
 
-# 日志与临时文件
+# Logs and temp files
 *.log
 
-# VitePress 构建缓存
+# VitePress build cache
 website/.vitepress/cache/
