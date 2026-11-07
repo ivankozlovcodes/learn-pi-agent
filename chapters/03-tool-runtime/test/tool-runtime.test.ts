@@ -1,7 +1,7 @@
 /**
- * 03 章测试：Tool Runtime——流水线（prepare/validate/execute/normalize）、
- * 钩子（beforeToolCall/afterToolCall）、tool_execution_* 事件、批终止语义。
- * 流式 mock LLM 驱动（离线）。
+ * Chapter 03 tests: Tool Runtime — the pipeline (prepare/validate/execute/normalize),
+ * hooks (beforeToolCall/afterToolCall), tool_execution_* events, batch termination semantics.
+ * Driven by a streaming mock LLM (offline).
  */
 import { describe, expect, it } from "vitest";
 import { agentLoop, runAgentLoop } from "../src/agent-loop.ts";
@@ -17,7 +17,7 @@ import type {
 } from "../../00-minimal-llm-call/src/index.ts";
 import { createCalculatorTool, createEchoTool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 流式 mock LLM：按脚本步骤逐轮返回事件序列。 */
+/** Streaming mock LLM: returns the event sequence for each turn from scripted steps. */
 class ScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -28,7 +28,7 @@ class ScriptedLlm implements LLMAdapter {
   }
 
   async *complete(input: LLMRequest): AsyncIterable<AssistantMessageEvent> {
-    // 快照请求时刻的 messages（循环会 push 进同一数组引用），供断言「后续 LLM 请求未被污染」使用
+    // Snapshot messages at request time (the loop pushes into the same array reference), used to assert "later LLM requests are not polluted"
     this.inputs.push({ ...input, messages: [...input.messages] });
     const events = this.steps[Math.min(this.next, this.steps.length - 1)];
     this.next++;
@@ -47,7 +47,7 @@ function textStream(text: string, stopReason: AssistantMessage["stopReason"] = "
   ];
 }
 
-/** 工具调用流：支持任意数量工具调用（一次模型回复可带多个 toolCall）。 */
+/** Tool call stream: supports any number of tool calls (one model reply can carry several toolCalls). */
 function toolStream(calls: { id: string; name: string; args: Record<string, unknown> }[]): AssistantMessageEvent[] {
   const partial: AssistantMessage = {
     role: "assistant",
@@ -78,11 +78,11 @@ const echo = createEchoTool();
 const calculator = createCalculatorTool();
 
 function baseContext(tools: Tool[] = [echo, calculator]): AgentContext {
-  return { systemPrompt: "助手", messages: [], tools };
+  return { systemPrompt: "assistant", messages: [], tools };
 }
 
-describe("Tool Runtime（03 章）", () => {
-  it("校验拦截：参数类型错误 → 错误结果，工具从未执行", async () => {
+describe("Tool Runtime (Chapter 03)", () => {
+  it("validation blocks: wrong argument type → error result, tool never executed", async () => {
     let executed = 0;
     const guarded: Tool<{ a: number; b: number }> = {
       ...calculator,
@@ -92,27 +92,27 @@ describe("Tool Runtime（03 章）", () => {
       },
     };
     const llm = new ScriptedLlm([
-      toolStream([{ id: "c1", name: "calculator", args: { a: "不是数字", b: 2 } }]),
-      textStream("参数有误"),
+      toolStream([{ id: "c1", name: "calculator", args: { a: "not a number", b: 2 } }]),
+      textStream("bad arguments"),
     ]);
     const recorder = new EventRecorder();
-    const messages = await runAgentLoop([{ role: "user", text: "算" }], baseContext([guarded]), { model: "m" }, llm, recorder.sink);
+    const messages = await runAgentLoop([{ role: "user", text: "calculate" }], baseContext([guarded]), { model: "m" }, llm, recorder.sink);
 
     expect(executed).toBe(0);
     const result = messages.find((m) => m.role === "toolResult");
     expect(result).toMatchObject({ isError: true, toolName: "calculator" });
-    expect(result?.text).toContain("参数校验失败");
-    expect(llm.callCount).toBe(2); // 错误结果回传后模型继续
+    expect(result?.text).toContain("Argument validation failed");
+    expect(llm.callCount).toBe(2); // the model continues after the error result is sent back
   });
 
-  it("校验拦截：缺少必填参数 → 错误结果", async () => {
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: {} }]), textStream("缺参数")]);
+  it("validation blocks: missing required argument → error result", async () => {
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: {} }]), textStream("missing argument")]);
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext(), { model: "m" }, llm, () => {});
 
     expect(messages.find((m) => m.role === "toolResult")?.text).toContain("Missing required argument");
   });
 
-  it("beforeToolCall 钩子：block → 错误结果，工具未执行", async () => {
+  it("beforeToolCall hook: block → error result, tool not executed", async () => {
     let executed = 0;
     const guarded: Tool<{ text: string }> = {
       ...echo,
@@ -121,81 +121,81 @@ describe("Tool Runtime（03 章）", () => {
         return echo.execute(args);
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("被拦")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("blocked")]);
     const messages = await runAgentLoop(
       [{ role: "user", text: "hi" }],
       baseContext([guarded]),
       {
         model: "m",
-        beforeToolCall: async () => ({ block: true, reason: "测试拦截" }),
+        beforeToolCall: async () => ({ block: true, reason: "test block" }),
       },
       llm,
       () => {},
     );
 
     expect(executed).toBe(0);
-    expect(messages.find((m) => m.role === "toolResult")).toMatchObject({ isError: true, text: "测试拦截" });
+    expect(messages.find((m) => m.role === "toolResult")).toMatchObject({ isError: true, text: "test block" });
   });
 
-  it("afterToolCall 钩子：字段级改写 content 与 terminate", async () => {
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("改写后")]);
+  it("afterToolCall hook: field-level override of content and terminate", async () => {
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("after override")]);
     const messages = await runAgentLoop(
       [{ role: "user", text: "hi" }],
       baseContext(),
       {
         model: "m",
-        afterToolCall: async ({ result }) => ({ content: `改写: ${result.content}`, terminate: true }),
+        afterToolCall: async ({ result }) => ({ content: `overridden: ${result.content}`, terminate: true }),
       },
       llm,
       () => {},
     );
 
     const result = messages.find((m) => m.role === "toolResult");
-    expect(result?.text).toBe("改写: hi");
+    expect(result?.text).toBe("overridden: hi");
     expect(result?.terminate).toBe(true);
   });
 
-  it("tool_execution_* 事件：start/end 必发，update 在 onUpdate 时发", async () => {
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("完成")]);
+  it("tool_execution_* events: start/end always emitted, update emitted on onUpdate", async () => {
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("done")]);
     const recorder = new EventRecorder();
     await runAgentLoop([{ role: "user", text: "hi" }], baseContext(), { model: "m" }, llm, recorder.sink);
 
     const types = recorder.toolEvents.map((e) => e.type);
     expect(types).toContain("tool_execution_start");
     expect(types).toContain("tool_execution_end");
-    expect(types).not.toContain("tool_execution_update"); // echo 不调 onUpdate
+    expect(types).not.toContain("tool_execution_update"); // echo does not call onUpdate
   });
 
-  it("onUpdate：工具执行中 partial 更新 → tool_execution_update 事件", async () => {
+  it("onUpdate: partial updates during tool execution → tool_execution_update events", async () => {
     const streaming: Tool = {
       name: "slow",
-      description: "分步执行",
+      description: "runs in steps",
       parameters: { type: "object", properties: {} },
       async execute(_args, onUpdate) {
-        onUpdate?.({ content: "第一步完成" });
-        onUpdate?.({ content: "第二步完成" });
-        return { content: "全部完成" };
+        onUpdate?.({ content: "step 1 done" });
+        onUpdate?.({ content: "step 2 done" });
+        return { content: "all done" };
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "slow", args: {} }]), textStream("完成")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "slow", args: {} }]), textStream("done")]);
     const recorder = new EventRecorder();
     await runAgentLoop([{ role: "user", text: "hi" }], baseContext([streaming]), { model: "m" }, llm, recorder.sink);
 
     const updates = recorder.toolEvents.filter((e) => e.type === "tool_execution_update");
     expect(updates).toHaveLength(2);
     if (updates[0]?.type === "tool_execution_update") {
-      expect(updates[0].partialResult).toMatchObject({ content: "第一步完成" });
+      expect(updates[0].partialResult).toMatchObject({ content: "step 1 done" });
     }
   });
 
-  it("normalize：details/usage/terminate/addedToolNames 进入工具结果消息", async () => {
+  it("normalize: details/usage/terminate/addedToolNames go into the tool result message", async () => {
     const rich: Tool = {
       name: "rich",
-      description: "返回结构化结果",
+      description: "returns a structured result",
       parameters: { type: "object", properties: {} },
       async execute() {
         return {
-          content: "处理完成",
+          content: "processing done",
           details: { rows: 42 },
           usage: { inputTokens: 10, outputTokens: 5 },
           terminate: true,
@@ -203,12 +203,12 @@ describe("Tool Runtime（03 章）", () => {
         };
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "rich", args: {} }]), textStream("完成")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "rich", args: {} }]), textStream("done")]);
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext([rich]), { model: "m" }, llm, () => {});
 
     const result = messages.find((m) => m.role === "toolResult");
     expect(result).toMatchObject({
-      text: "处理完成",
+      text: "processing done",
       details: { rows: 42 },
       usage: { inputTokens: 10, outputTokens: 5 },
       terminate: true,
@@ -217,11 +217,11 @@ describe("Tool Runtime（03 章）", () => {
     });
   });
 
-  it("prepareArguments：兼容层把模型原始参数转为工具期望格式", async () => {
+  it("prepareArguments: the compatibility layer converts the model's raw arguments into the format the tool expects", async () => {
     const lenient: Tool<{ text: string }> = {
       name: "echo2",
-      description: "接受 { input } 或 { text }",
-      // parameters 描述转换后的形状：校验发生在 prepare 之后（Pi L617-618）
+      description: "accepts { input } or { text }",
+      // parameters describe the converted shape: validation happens after prepare (Pi L617-618)
       parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
       prepareArguments: (args) => {
         const record = args as Record<string, unknown>;
@@ -231,53 +231,53 @@ describe("Tool Runtime（03 章）", () => {
         return { content: `echo2: ${text}` };
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo2", args: { input: "兼容" } }]), textStream("完成")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo2", args: { input: "compat" } }]), textStream("done")]);
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext([lenient]), { model: "m" }, llm, () => {});
 
-    expect(messages.find((m) => m.role === "toolResult")?.text).toBe("echo2: 兼容");
+    expect(messages.find((m) => m.role === "toolResult")?.text).toBe("echo2: compat");
   });
 
-  it("批终止：整批全部 terminate 才停；仅部分 terminate 则继续", async () => {
+  it("batch termination: stop only if the whole batch terminates; continue if only some terminate", async () => {
     const stopping: Tool = {
       name: "stop",
-      description: "建议停止",
+      description: "suggests stopping",
       parameters: { type: "object", properties: {} },
       async execute() {
-        return { content: "建议停", terminate: true };
+        return { content: "suggest stop", terminate: true };
       },
     };
 
-    // 场景 A：两个工具都 terminate → 循环停止（不再调用 LLM）
+    // Scenario A: both tools terminate → the loop stops (no more LLM calls)
     const allStop = new ScriptedLlm([toolStream([{ id: "c1", name: "stop", args: {} }, { id: "c2", name: "stop", args: {} }])]);
     const recorderA = new EventRecorder();
     await runAgentLoop([{ role: "user", text: "hi" }], baseContext([stopping]), { model: "m" }, allStop, recorderA.sink);
     expect(allStop.callCount).toBe(1);
     expect(recorderA.types.at(-1)).toBe("agent_end");
 
-    // 场景 B：一个 terminate、一个不 terminate → 继续循环
+    // Scenario B: one terminates, one doesn't → the loop continues
     const partialStop = new ScriptedLlm([
       toolStream([{ id: "c1", name: "stop", args: {} }, { id: "c2", name: "echo", args: { text: "hi" } }]),
-      textStream("继续后完成"),
+      textStream("done after continuing"),
     ]);
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext([stopping, echo]), { model: "m" }, partialStop, () => {});
     expect(partialStop.callCount).toBe(2);
-    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "继续后完成" });
+    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "done after continuing" });
   });
 
-  it("正常闭环仍工作：echo → calculator → 最终文本（回归）", async () => {
+  it("the normal loop still works: echo → calculator → final text (regression)", async () => {
     const llm = new ScriptedLlm([
-      toolStream([{ id: "c1", name: "echo", args: { text: "开始" } }]),
+      toolStream([{ id: "c1", name: "echo", args: { text: "start" } }]),
       toolStream([{ id: "c2", name: "calculator", args: { a: 1, b: 2 } }]),
       textStream("3"),
     ]);
-    const messages = await agentLoop([{ role: "user", text: "依次执行" }], baseContext(), { model: "m" }, llm);
+    const messages = await agentLoop([{ role: "user", text: "run in order" }], baseContext(), { model: "m" }, llm);
     const result = await messages.result();
 
     expect(result.at(-1)).toMatchObject({ role: "assistant", text: "3" });
     expect(result.filter((m) => m.role === "toolResult").length).toBe(2);
   });
 
-  it("beforeToolCall 抛错：错误结果、工具不执行、start/end 配对、不击穿循环（Pi L616-667）", async () => {
+  it("beforeToolCall throws: error result, tool not executed, start/end paired, loop not broken (Pi L616-667)", async () => {
     let executed = 0;
     const guarded: Tool = {
       ...echo,
@@ -286,7 +286,7 @@ describe("Tool Runtime（03 章）", () => {
         return echo.execute(args);
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("继续")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("continue")]);
     const recorder = new EventRecorder();
     const messages = await runAgentLoop(
       [{ role: "user", text: "hi" }],
@@ -294,27 +294,27 @@ describe("Tool Runtime（03 章）", () => {
       {
         model: "m",
         beforeToolCall: async () => {
-          throw new Error("钩子炸了");
+          throw new Error("hook blew up");
         },
       },
       llm,
       recorder.sink,
     );
 
-    expect(executed).toBe(0); // 钩子抛错发生在 execute 之前
+    expect(executed).toBe(0); // the hook throws before execute
     expect(messages.find((m) => m.role === "toolResult")).toMatchObject({
       isError: true,
-      text: "beforeToolCall 钩子抛错: 钩子炸了",
+      text: "beforeToolCall hook threw: hook blew up",
     });
     const starts = recorder.toolEvents.filter((e) => e.type === "tool_execution_start");
     const ends = recorder.toolEvents.filter((e) => e.type === "tool_execution_end");
-    expect(starts).toHaveLength(1); // start/end 配对不受钩子错误影响
+    expect(starts).toHaveLength(1); // start/end pairing is not affected by the hook error
     expect(ends).toHaveLength(1);
-    expect(llm.callCount).toBe(2); // 错误不击穿循环，下一轮继续
+    expect(llm.callCount).toBe(2); // the error doesn't break the loop; the next turn continues
     expect(recorder.types.at(-1)).toBe("agent_end");
   });
 
-  it("afterToolCall 抛错：执行已完成、结果转错误、end 与 toolResult 一致、不击穿批次（Pi L747-750）", async () => {
+  it("afterToolCall throws: execution already done, result becomes an error, end matches toolResult, batch not broken (Pi L747-750)", async () => {
     let executed = 0;
     const guarded: Tool = {
       ...echo,
@@ -328,7 +328,7 @@ describe("Tool Runtime（03 章）", () => {
         { id: "c1", name: "echo", args: { text: "hi" } },
         { id: "c2", name: "echo", args: { text: "b" } },
       ]),
-      textStream("继续"),
+      textStream("continue"),
     ]);
     const recorder = new EventRecorder();
     const messages = await runAgentLoop(
@@ -337,28 +337,28 @@ describe("Tool Runtime（03 章）", () => {
       {
         model: "m",
         afterToolCall: async () => {
-          throw new Error("改写炸了");
+          throw new Error("override blew up");
         },
       },
       llm,
       recorder.sink,
     );
 
-    expect(executed).toBe(2); // 两个工具都已实际执行
+    expect(executed).toBe(2); // both tools actually executed
     const results = messages.filter((m) => m.role === "toolResult");
     expect(results).toHaveLength(2);
     for (const r of results) {
-      expect(r).toMatchObject({ isError: true, text: "改写炸了" }); // 原成功结果不得进 history
+      expect(r).toMatchObject({ isError: true, text: "override blew up" }); // the original success result must not enter history
     }
     const ends = recorder.toolEvents.filter((e) => e.type === "tool_execution_end");
     expect(ends).toHaveLength(2);
     if (ends[0]?.type === "tool_execution_end") {
-      expect(ends[0]).toMatchObject({ isError: true, result: { content: "改写炸了" } }); // end 与最终 toolResult 一致
+      expect(ends[0]).toMatchObject({ isError: true, result: { content: "override blew up" } }); // end matches the final toolResult
     }
-    expect(llm.callCount).toBe(2); // 不击穿批次/循环
+    expect(llm.callCount).toBe(2); // batch/loop not broken
   });
 
-  it("not-found：tool_execution_start 在 lookup 之前发生，start/end 各一次，工具不执行（Pi L445-450 + L608-614）", async () => {
+  it("not-found: tool_execution_start happens before lookup, one start and one end, tool not executed (Pi L445-450 + L608-614)", async () => {
     let executed = 0;
     const guarded: Tool = {
       ...echo,
@@ -367,11 +367,11 @@ describe("Tool Runtime（03 章）", () => {
         return echo.execute(args);
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "ghost", args: {} }]), textStream("继续")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "ghost", args: {} }]), textStream("continue")]);
     const recorder = new EventRecorder();
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext([guarded]), { model: "m" }, llm, recorder.sink);
 
-    // 事件顺序：tool_execution_start → tool_execution_end → message_start(toolResult) → message_end(toolResult)
+    // Event order: tool_execution_start → tool_execution_end → message_start(toolResult) → message_end(toolResult)
     const indexOf = (type: string): number => recorder.events.findIndex((e) => e.type === type);
     expect(indexOf("tool_execution_start")).toBeGreaterThanOrEqual(0);
     expect(indexOf("tool_execution_end")).toBeGreaterThan(indexOf("tool_execution_start"));
@@ -380,14 +380,14 @@ describe("Tool Runtime（03 章）", () => {
     expect(resultStart).toBeGreaterThan(indexOf("tool_execution_end"));
     expect(resultEnd).toBeGreaterThan(resultStart);
 
-    // start/end 各一次：若未来有人把 start 移到 lookup 成功之后，not-found 路径将没有 start
+    // One start and one end: if someone later moves start after a successful lookup, the not-found path will have no start
     expect(recorder.toolEvents.filter((e) => e.type === "tool_execution_start")).toHaveLength(1);
     expect(recorder.toolEvents.filter((e) => e.type === "tool_execution_end")).toHaveLength(1);
     expect(messages.find((m) => m.role === "toolResult")).toMatchObject({ isError: true, text: "Tool ghost not found" });
     expect(executed).toBe(0);
   });
 
-  it("signal 中途 abort：首个工具后 break，第二个不执行，结果入史并收尾（Pi L478-480）", async () => {
+  it("signal aborts midway: break after the first tool, second not executed, result enters history and the run closes out (Pi L478-480)", async () => {
     const controller = new AbortController();
     const executed: string[] = [];
     const first: Tool = {
@@ -395,7 +395,7 @@ describe("Tool Runtime（03 章）", () => {
       name: "echo_first",
       async execute(args: never) {
         executed.push("first");
-        controller.abort(); // 执行期间触发 abort：循环在第一个工具返回后 break
+        controller.abort(); // trigger abort during execution: the loop breaks after the first tool returns
         return echo.execute(args);
       },
     };
@@ -415,7 +415,7 @@ describe("Tool Runtime（03 章）", () => {
         { id: "c2", name: "echo_second", arguments: { text: "b" } },
       ],
     };
-    // 第二轮：abort 后仍进入下一轮（hasMoreToolCalls=true）；真实 adapter 此时会因 signal 返回 aborted → 终止①
+    // Second turn: after abort the loop still enters the next turn (hasMoreToolCalls=true); a real adapter would return aborted because of the signal → termination ①
     const aborted: AssistantMessage = { role: "assistant", stopReason: "aborted", errorMessage: "Operation aborted" };
     const llm = new ScriptedLlm([
       [
@@ -430,7 +430,7 @@ describe("Tool Runtime（03 章）", () => {
     ]);
     const recorder = new EventRecorder();
     const messages = await runAgentLoop(
-      [{ role: "user", text: "两个工具" }],
+      [{ role: "user", text: "two tools" }],
       baseContext([first, second]),
       { model: "m" },
       llm,
@@ -438,34 +438,34 @@ describe("Tool Runtime（03 章）", () => {
       controller.signal,
     );
 
-    expect(executed).toEqual(["first"]); // 第二个工具从未执行
+    expect(executed).toEqual(["first"]); // the second tool never executed
     const toolResults = messages.filter((m) => m.role === "toolResult");
-    expect(toolResults).toHaveLength(1); // 已完成的第一个 toolResult 正常入史
+    expect(toolResults).toHaveLength(1); // the completed first toolResult enters history normally
     expect(toolResults[0]).toMatchObject({ toolCallId: "c1", toolName: "echo_first" });
     const turnEnds = recorder.events.filter((e) => e.type === "turn_end");
-    expect(turnEnds).toHaveLength(2); // 工具轮与 aborted 轮均正确收尾
+    expect(turnEnds).toHaveLength(2); // both the tool turn and the aborted turn close out correctly
     if (turnEnds[0]?.type === "turn_end") {
       expect(turnEnds[0].toolResults).toHaveLength(1);
     }
     expect(llm.callCount).toBe(2);
-    expect(recorder.types.at(-1)).toBe("agent_end"); // 生命周期正确收尾
+    expect(recorder.types.at(-1)).toBe("agent_end"); // the lifecycle closes out correctly
     expect(messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "aborted" });
   });
 
-  it("message 事件快照隔离：消费者改动 event.message 不污染 history 与后续 LLM 请求", async () => {
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("完成")]);
+  it("message event snapshot isolation: consumer changes to event.message don't pollute history or later LLM requests", async () => {
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: { text: "hi" } }]), textStream("done")]);
     const mutatingSink: AgentEventSink = (event) => {
-      // 消费者恶意改动事件 payload：快照隔离前，raw-reference 位点会被直接污染内部 history
+      // A consumer maliciously mutates the event payload: before snapshot isolation, raw-reference sites would pollute the internal history directly
       if (event.type === "message_end") {
-        event.message.text = "被污染";
+        event.message.text = "polluted";
         event.message.isError = true;
       }
     };
-    const messages = await runAgentLoop([{ role: "user", text: "回显" }], baseContext(), { model: "m" }, llm, mutatingSink);
+    const messages = await runAgentLoop([{ role: "user", text: "echo" }], baseContext(), { model: "m" }, llm, mutatingSink);
 
     expect(messages.find((m) => m.role === "toolResult")).toMatchObject({ text: "hi", isError: false });
-    expect(messages.at(-1)?.text).toBe("完成"); // assistant 最终消息同样未被污染
-    const secondRequest = llm.inputs[1]; // 第二轮 LLM 请求（请求时刻快照）
+    expect(messages.at(-1)?.text).toBe("done"); // the final assistant message is not polluted either
+    const secondRequest = llm.inputs[1]; // the second-turn LLM request (snapshot at request time)
     expect(secondRequest.messages.find((m) => m.role === "toolResult")).toMatchObject({ text: "hi", isError: false });
   });
 });

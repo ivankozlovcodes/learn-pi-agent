@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 03 章：Tool Runtime（工具执行流水线）",
+  "description": "learn-pi-agent Chapter 03: Tool Runtime (tool execution pipeline)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
