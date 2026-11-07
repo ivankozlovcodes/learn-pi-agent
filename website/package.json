@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 文档站（VitePress）：Pi Agent 架构中文教程，13 章逐行锚定源码",
+  "description": "learn-pi-agent docs site (VitePress): a Pi Agent architecture tutorial in 13 chapters, anchored line by line to the source",
   "scripts": {
     "sync": "node scripts/sync-readmes.mjs",
     "docs:dev": "node scripts/sync-readmes.mjs && vitepress dev .",

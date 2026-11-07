@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import DefaultTheme from "vitepress/theme";
 import { useData } from "vitepress";
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 /**
- * 主题布局包装：在默认 Layout 上注入章节阅读进度条（顶部 2px 品牌色）。
- * 仅在章节页渲染；首页与列表页不出现。
+ * Theme layout wrapper: injects a chapter reading progress bar (2px brand color at the top) into the default Layout.
+ * Rendered on chapter pages only (both locales); not on the home page or list pages.
  */
 const { Layout } = DefaultTheme;
 const { page } = useData();
+const isChapterPage = computed(() => /^(en\/)?chapters\//.test(page.value.relativePath));
 const progress = ref(0);
 
 let ticking = false;
@@ -36,7 +37,7 @@ onBeforeUnmount(() => window.removeEventListener("scroll", onScroll));
   <Layout>
     <template #layout-top>
       <div
-        v-if="page.relativePath.startsWith('chapters/')"
+        v-if="isChapterPage"
         class="read-progress"
         :style="{ transform: `scaleX(${progress})` }"
         aria-hidden="true"

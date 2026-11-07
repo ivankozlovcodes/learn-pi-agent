@@ -1,50 +1,81 @@
 /**
- * 站点同步脚本：把各章节 README 复制为站点页面。
+ * Site sync script: copies each chapter README into a site page.
  *
- * 防漂移设计：站点页面不是手写副本，每次 docs:dev / docs:build 前重新生成。
- * 处理两件事：
- * 1. 复制：chapters 各目录的 README.md → website/chapters/
- * 2. frontmatter：从 H1 提取 title，从首段提取 description（SEO）
+ * Anti-drift design: site pages are not hand-written copies; they are regenerated before every docs:dev / docs:build.
+ * It handles these things:
+ * 1. Copy: chapters/<NN-name>/README.md → website/chapters/ (zh, root locale)
+ *    and chapters/<NN-name>/README.en.md → website/en/chapters/ (en locale; chapters without one are skipped with a warning)
+ * 2. frontmatter: title from the H1, description from the first paragraph (SEO)
  *
- * 章节 README 相互引用一律用纯文本「Chapter NN」，不写仓库内相对链接，
- * 因此同步是纯机械复制，无需链接重写。
- * 3. canonical：每章页面注入 canonical URL（SEO，防重复内容判定）
+ * Chapter READMEs cross-reference each other as plain text "Chapter NN", never as in-repo relative links,
+ * so the zh sync is a purely mechanical copy; the en output only rewrites site chapter links to /en/chapters/.
+ * 3. canonical: each chapter page gets a canonical URL injected (SEO, avoids duplicate-content detection)
+ *
+ * Each target has its own output dir and its own stale cleanup; cleanup never crosses dirs.
  */
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SITE_URL = "https://yiz-hhh.github.io/learn-pi-agent";
-const OUT_DIR = join(ROOT, "website", "chapters");
 
-let copied = 0;
 const chapterDirs = readdirSync(join(ROOT, "chapters"), { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => e.name)
   .sort();
-mkdirSync(OUT_DIR, { recursive: true });
-const currentPages = new Set(chapterDirs.map((name) => `${name}.md`));
-for (const file of readdirSync(OUT_DIR)) {
-  if (file.endsWith(".md") && !currentPages.has(file)) {
-    unlinkSync(join(OUT_DIR, file));
-    console.log(`移除过期页面: website/chapters/${file}`);
-  }
-}
-for (const name of chapterDirs) {
-  const readmePath = join(ROOT, "chapters", name, "README.md");
-  const raw = readFileSync(readmePath, "utf-8"); // 章节目录必须带 README，缺文件直接报错（防静默漏页）
-  const outFile = join(OUT_DIR, `${name}.md`);
-  writeFileSync(outFile, buildPage(raw, `${SITE_URL}/chapters/${name}`), "utf-8");
-  copied++;
-  console.log(`同步: chapters/${name}/README.md → website/chapters/${name}.md`);
-}
-console.log(`\n完成：${copied} 个页面已同步到 website/chapters/`);
 
-/** 组装页面：frontmatter（YAML 安全引用，含 canonical head）+ 正文。 */
+const TARGETS = [
+  {
+    readme: "README.md",
+    outDir: "website/chapters",
+    urlPrefix: "/chapters",
+    required: true,
+    transform: (raw) => raw,
+  },
+  {
+    readme: "README.en.md",
+    outDir: "website/en/chapters",
+    urlPrefix: "/en/chapters",
+    required: false,
+    transform: (raw) => raw.replace(/\]\(\.?\/chapters\//g, "](/en/chapters/"),
+  },
+];
+
+for (const target of TARGETS) syncTarget(target);
+
+function syncTarget({ readme, outDir, urlPrefix, required, transform }) {
+  const outPath = join(ROOT, outDir);
+  // Required targets must have a README in every chapter dir; optional ones only sync chapters that have it
+  const names = required ? chapterDirs : chapterDirs.filter((name) => existsSync(join(ROOT, "chapters", name, readme)));
+  for (const name of chapterDirs) {
+    if (!names.includes(name)) console.warn(`Skipped: chapters/${name}/${readme} does not exist yet`);
+  }
+
+  let copied = 0;
+  mkdirSync(outPath, { recursive: true });
+  const currentPages = new Set(names.map((name) => `${name}.md`));
+  for (const file of readdirSync(outPath)) {
+    if (file.endsWith(".md") && !currentPages.has(file)) {
+      unlinkSync(join(outPath, file));
+      console.log(`Removed stale page: ${outDir}/${file}`);
+    }
+  }
+  for (const name of names) {
+    const readmePath = join(ROOT, "chapters", name, readme);
+    const raw = readFileSync(readmePath, "utf-8"); // Required READMEs must exist; a missing file throws (prevents silently missing pages)
+    const outFile = join(outPath, `${name}.md`);
+    writeFileSync(outFile, buildPage(transform(raw), `${SITE_URL}${urlPrefix}/${name}`), "utf-8");
+    copied++;
+    console.log(`Synced: chapters/${name}/${readme} → ${outDir}/${name}.md`);
+  }
+  console.log(`\nDone: ${copied} pages synced to ${outDir}/`);
+}
+
+/** Assemble a page: frontmatter (YAML-safe quoting, includes the canonical head) + body. */
 function buildPage(raw, canonical) {
   const { title, description } = extractFrontmatter(raw);
-  // YAML 安全引用：JSON 字符串语法与 YAML 双引号字符串兼容（转义 \n \t 等）
+  // YAML-safe quoting: JSON string syntax is compatible with YAML double-quoted strings (escapes \n \t etc.)
   const yamlString = (value) => JSON.stringify(value);
   const head = [["link", { rel: "canonical", href: canonical }]];
   const frontmatter = [

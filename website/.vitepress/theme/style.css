@@ -1,7 +1,7 @@
 /* ==========================================================================
-   learn-pi-agent 站点主题
-   配色：暖纸米白（light）/ 暖墨（dark）+ 明亮陶土橙品牌色。
-   轨道节点色：与暖色系协调的大地色 accents。
+   learn-pi-agent site theme
+   Palette: warm paper off-white (light) / warm ink (dark) + bright terracotta-orange brand color.
+   Orbit node colors: earth-tone accents that harmonize with the warm palette.
    ========================================================================== */
 
 :root {
@@ -21,9 +21,9 @@
   --vp-font-family-base: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
   --vp-font-family-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --vp-code-block-bg: #20211f;
-  /* 首页暗角（light：极淡的暖灰收边） */
+  /* Home vignette (light: a very faint warm-gray edge) */
   --home-vignette: rgba(23, 24, 23, 0.05);
-  /* 六个轨道节点的 accent 色（light：在米白纸面上需更深） */
+  /* Accent colors of the six orbit nodes (light: need to be darker on the off-white paper) */
   --acc-skills: #648c3f;
   --acc-session: #4a6fa0;
   --acc-extensions: #d35f33;
@@ -48,7 +48,7 @@ html.dark {
   --vp-c-brand-soft: rgba(255, 138, 92, 0.16);
   --vp-code-block-bg: #101110;
   --home-vignette: rgba(10, 10, 9, 0.22);
-  /* 轨道节点 accent（dark：在暖墨底上需更亮、带荧光感） */
+  /* Orbit node accents (dark: need to be brighter, with a fluorescent feel, on the warm ink background) */
   --acc-skills: #a7c98a;
   --acc-session: #93b2d6;
   --acc-extensions: #f0936a;
@@ -58,7 +58,7 @@ html.dark {
 }
 
 /* --------------------------------------------------------------------------
-   基础可及性：选中色、焦点环、平滑滚动（reduced-motion 在文末兜底）
+   Basic accessibility: selection color, focus ring, smooth scrolling (reduced-motion fallback at the end of the file)
    -------------------------------------------------------------------------- */
 ::selection { background: color-mix(in srgb, var(--vp-c-brand-1) 24%, transparent); }
 html { scroll-behavior: smooth; }
@@ -67,7 +67,7 @@ html { scroll-behavior: smooth; }
 body { background: var(--vp-c-bg); }
 
 /* --------------------------------------------------------------------------
-   导航与侧栏
+   Navigation and sidebar
    -------------------------------------------------------------------------- */
 .VPNavBar { background: color-mix(in srgb, var(--vp-c-bg) 94%, transparent); border-bottom: 1px solid var(--vp-c-divider); backdrop-filter: blur(14px); }
 .VPNavBar .container { max-width: 1280px; margin: 0 auto; }
@@ -85,7 +85,7 @@ body { background: var(--vp-c-bg); }
 .VPDocAsideOutline .outline-link.active { color: var(--vp-c-brand-1); }
 
 /* --------------------------------------------------------------------------
-   章节正文（vp-doc）阅读体验
+   Chapter body (vp-doc) reading experience
    -------------------------------------------------------------------------- */
 .vp-doc { font-size: 17px; }
 .vp-doc h1, .vp-doc h2, .vp-doc h3 { letter-spacing: -.035em; }
@@ -106,8 +106,8 @@ body { background: var(--vp-c-bg); }
 .vp-doc tr { border-top: 1px solid var(--vp-c-divider); }
 .vp-doc tbody tr:hover { background: var(--vp-c-bg-alt); }
 .vp-doc tr:last-child { border-bottom: 1px solid var(--vp-c-divider); }
-/* text 等无高亮 token 的围栏块没有内联色，且默认主题给 code 设了正文灰；
-   强制 pre/code 为亮色前景（代码块背景永远是深色；有 token 的行走内联色不受影响） */
+/* Fence blocks without highlight tokens (text etc.) have no inline color, and the default theme gives code the body gray;
+   force a light foreground on pre/code (code block background is always dark; lines with tokens use inline colors and are unaffected) */
 .vp-doc div[class*="language-"] pre, .vp-doc div[class*="language-"] pre code { color: #e6edf3; }
 .vp-doc .custom-block, div[class*="language-"] { border-radius: 6px; }
 div[class*="language-"] { border: 1px solid var(--vp-c-divider); box-shadow: 0 10px 28px rgba(22, 23, 20, .14); }
@@ -117,15 +117,15 @@ html.dark div[class*="language-"] { border-color: #363832; }
 .vp-doc .custom-block.tip { border-left-color: var(--vp-c-brand-1); }
 .vp-doc .custom-block.tip .custom-block-title { color: var(--vp-c-brand-1); }
 
-/* text 图块（ASCII 图 / 示例输入输出，占全部围栏块约 73%）：
-   与代码块区分——虚线边框 + 极淡品牌底色，隐藏噪音性的 text 语言标签 */
+/* text diagram blocks (ASCII diagrams / sample input and output, about 73% of all fence blocks):
+   set apart from code blocks with a dashed border + a very faint brand background; hide the noisy text language label */
 div[class*="language-text"] .lang { display: none; }
 .vp-doc div[class*="language-text"] { border-style: dashed; background: color-mix(in srgb, var(--vp-code-block-bg) 94%, var(--vp-c-brand-1) 4%); }
 
-/* 章节页阅读进度条（Layout.vue 注入，首页不渲染） */
+/* Chapter page reading progress bar (injected by Layout.vue, not rendered on the home page) */
 .read-progress { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 2px; background: var(--vp-c-brand-1); transform-origin: 0 50%; pointer-events: none; }
 
-/* 上一章 / 下一章导航卡 */
+/* Previous / next chapter navigation cards */
 .VPDocFooter .pager-link { border: 1px solid var(--vp-c-divider); border-radius: 10px; transition: border-color 180ms ease, transform 180ms ease; }
 .VPDocFooter .pager-link:hover { border-color: var(--vp-c-brand-1); transform: translateY(-1px); }
 
@@ -134,9 +134,9 @@ div[class*="language-text"] .lang { display: none; }
 .VPDoc:not(.has-sidebar) .VPDocFooter { display: none; }
 
 /* --------------------------------------------------------------------------
-   首页：一屏铺满的 Hero + 从这里开始 + 代码窗。
-   说明：首页组件渲染在 .vp-doc 内，这里的选择器统一加 .home-page 前缀，
-   以更高优先级覆盖上面的正文规则，且不影响章节页。
+   Home: a full-screen Hero + Start here + code window.
+   Note: the home component renders inside .vp-doc, so the selectors here all carry the .home-page prefix
+   to override the body rules above with higher specificity without affecting chapter pages.
    -------------------------------------------------------------------------- */
 .home-page { position: relative; width: 100%; min-height: calc(100vh - 64px); min-height: calc(100svh - 64px); }
 .home-page::before { content: ""; position: absolute; inset: 0; background: radial-gradient(135% 95% at 50% 28%, transparent 58%, var(--home-vignette) 100%); pointer-events: none; }
@@ -144,7 +144,7 @@ div[class*="language-text"] .lang { display: none; }
 .home-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(circle, color-mix(in srgb, var(--vp-c-text-1) 8%, transparent) 1px, transparent 1.5px); background-size: 24px 24px; -webkit-mask-image: radial-gradient(68% 62% at 68% 40%, #000 0%, transparent 100%); mask-image: radial-gradient(68% 62% at 68% 40%, #000 0%, transparent 100%); pointer-events: none; }
 .home-hero::after { content: ""; position: absolute; inset: -8% -4%; z-index: -1; background: radial-gradient(46% 40% at 68% 38%, color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent), transparent 70%); pointer-events: none; }
 
-/* 入场编排：用独立的 translate/scale 属性，不与 hover 的 transform 冲突 */
+/* Entrance choreography: uses the separate translate/scale properties so it doesn't conflict with the hover transform */
 .home-page .home-copy h1 { margin: 0; padding: 0 0 .08em; border: 0; color: transparent; background: linear-gradient(178deg, var(--vp-c-text-1) 58%, color-mix(in srgb, var(--vp-c-text-1) 66%, var(--vp-c-bg)) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; font-size: clamp(3.4rem, 5.6vw, 4.7rem); line-height: 1.04; letter-spacing: -.045em; font-weight: 750; white-space: nowrap; animation: hero-rise .6s cubic-bezier(.22, .61, .36, 1) 40ms both; }
 .home-page .home-copy p { max-width: 480px; margin: 24px 0 30px; color: var(--vp-c-text-2); font-size: clamp(1.08rem, 1.3vw, 1.24rem); line-height: 1.7; animation: hero-rise .6s cubic-bezier(.22, .61, .36, 1) 120ms both; }
 @keyframes hero-rise { from { opacity: 0; translate: 0 14px; } to { opacity: 1; translate: 0 0; } }
@@ -154,14 +154,14 @@ div[class*="language-text"] .lang { display: none; }
 .home-cta:hover span { transform: translateX(3px); }
 
 /* --------------------------------------------------------------------------
-   首页：轨道图（宽幅椭圆 720×280，出血右缘，首屏主角）
+   Home: orbit diagram (wide 720×280 ellipse, bleeding off the right edge, the star of the first screen)
    -------------------------------------------------------------------------- */
 .agent-orbit { position: relative; justify-self: end; width: min(760px, 124%); aspect-ratio: 720 / 280; margin-right: -40px; rotate: -3deg; animation: orbit-in .8s cubic-bezier(.22, .61, .36, 1) 260ms both; }
 @keyframes orbit-in { from { opacity: 0; scale: .94; } to { opacity: 1; scale: 1; } }
 .orbit-aurora { position: absolute; left: 50%; top: 50%; width: 72%; aspect-ratio: 1; transform: translate(-50%, -50%); translate: calc(var(--px, 0) * -14px) calc(var(--py, 0) * -14px); border-radius: 50%; background: conic-gradient(from 0deg, transparent 0%, color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent) 12%, transparent 34%); filter: blur(48px); animation: aurora-rotate 26s linear infinite; pointer-events: none; }
 @keyframes aurora-rotate { to { transform: translate(-50%, -50%) rotate(360deg); } }
 .orbit-svg { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; overflow: visible; transform: translate(calc(var(--px, 0) * 6px), calc(var(--py, 0) * 6px)); }
-/* 环描边渐变端点：远侧暗、近侧亮（取值自主题 token，双主题自适应） */
+/* Ring stroke gradient stops: dark on the far side, bright on the near side (values from theme tokens, adapts to both themes) */
 .stop-far { stop-color: color-mix(in srgb, var(--vp-c-text-3) 28%, var(--vp-c-divider)); }
 .stop-near { stop-color: color-mix(in srgb, var(--vp-c-text-3) 64%, var(--vp-c-divider)); }
 .star { fill: var(--vp-c-text-2); opacity: .15; animation: star-twinkle 3.6s ease-in-out infinite alternate; }
@@ -183,13 +183,13 @@ div[class*="language-text"] .lang { display: none; }
 .orbit-glow { position: absolute; left: 50%; top: 50%; z-index: 2; width: 60%; aspect-ratio: 1; transform: translate(-50%, -50%); translate: calc(var(--px, 0) * -8px) calc(var(--py, 0) * -8px); border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent), transparent 72%); animation: orbit-pulse 6s ease-in-out infinite alternate; pointer-events: none; }
 @keyframes orbit-pulse { from { opacity: .65; transform: translate(-50%, -50%) scale(.94); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } }
 .orbit-core { position: absolute; top: 50%; left: 50%; z-index: 3; transform: translate(-50%, -50%); color: var(--vp-c-brand-1); font-size: 20px; font-weight: 680; letter-spacing: -.01em; white-space: nowrap; text-shadow: 0 0 26px color-mix(in srgb, var(--vp-c-brand-1) 60%, transparent); }
-/* hover 节点时中心文字交叉淡化联动（Transition mode=out-in） */
+/* Center text cross-fades with the hovered node (Transition mode=out-in) */
 .orbit-core span { display: inline-block; }
 .core-fade-enter-active, .core-fade-leave-active { transition: opacity 160ms ease, translate 160ms ease; }
 .core-fade-enter-from { opacity: 0; translate: 0 5px; }
 .core-fade-leave-to { opacity: 0; translate: 0 -5px; }
 .orbit-nav { position: absolute; inset: 0; }
-/* 前缀 .home-page 提升优先级，盖住默认主题 .vp-doc a 的颜色与下划线 */
+/* The .home-page prefix raises specificity to override the default theme's .vp-doc a color and underline */
 .home-page .orbit-node { position: absolute; z-index: 4; display: inline-flex; align-items: center; transform: translate(-5px, -50%); color: var(--vp-c-text-1); font-size: 13.5px; font-weight: 550; white-space: nowrap; text-decoration: none; transition: color 160ms ease; animation: node-pop .45s cubic-bezier(.22, .61, .36, 1) both; }
 .home-page .orbit-node:nth-child(1) { animation-delay: .55s; }
 .home-page .orbit-node:nth-child(2) { animation-delay: .62s; }
@@ -199,12 +199,12 @@ div[class*="language-text"] .lang { display: none; }
 .home-page .orbit-node:nth-child(6) { animation-delay: .9s; }
 @keyframes node-pop { from { opacity: 0; scale: .5; } to { opacity: 1; scale: 1; } }
 .orbit-node .node-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--node); box-shadow: 0 0 0 3px color-mix(in srgb, var(--node) 16%, transparent), 0 0 14px color-mix(in srgb, var(--node) 50%, transparent); transition: transform 160ms ease; }
-/* 标签锚在节点圆心，JS 每帧写入 --lx/--ly（朝轨道中心方向的偏移），
-   光晕保证标签跨过轨道线时可读 */
+/* The label is anchored at the node center; JS writes --lx/--ly every frame (offset toward the orbit center),
+   the halo keeps the label readable when it crosses ring lines */
 .orbit-node .node-label { position: absolute; left: 50%; top: 50%; transform: translate(calc(var(--lx, 14px) - 50%), calc(var(--ly, 0px) - 50%)); text-shadow: 0 0 4px var(--vp-c-bg), 0 0 10px var(--vp-c-bg), 0 0 16px color-mix(in srgb, var(--vp-c-bg) 85%, transparent); }
 .home-page .orbit-node:hover { color: var(--node); text-decoration: none; }
 .orbit-node:hover .node-dot { transform: scale(1.25); }
-/* hover 节点点亮所属轨道（:has 不支持的浏览器自动降级为无高亮） */
+/* Hovering a node lights up its ring (browsers without :has support fall back to no highlight) */
 .agent-orbit:has(.node-skills:hover) .ring-outer,
 .agent-orbit:has(.node-extensions:hover) .ring-outer,
 .agent-orbit:has(.node-context:hover) .ring-inner,
@@ -215,7 +215,7 @@ div[class*="language-text"] .lang { display: none; }
 .agent-orbit:has(.node-provider:hover) .ring-inner { stroke: var(--acc-provider); }
 .agent-orbit:has(.node-session:hover) .ring-middle { opacity: 1; stroke-width: 1.4; stroke: var(--acc-session); }
 .agent-orbit:has(.node-tools:hover) .ring-middle { opacity: 1; stroke-width: 1.4; stroke: var(--acc-tools); }
-/* hover 联动：核心环也染成节点色 */
+/* Hover link: the core ring also takes the node color */
 .agent-orbit:has(.node-skills:hover) .ring-core { stroke: var(--acc-skills); opacity: .55; }
 .agent-orbit:has(.node-session:hover) .ring-core { stroke: var(--acc-session); opacity: .55; }
 .agent-orbit:has(.node-extensions:hover) .ring-core { stroke: var(--acc-extensions); opacity: .55; }
@@ -230,7 +230,7 @@ div[class*="language-text"] .lang { display: none; }
 .node-tools { --node: var(--acc-tools); }
 
 /* --------------------------------------------------------------------------
-   首页：从这里开始（区块头居中 + 代码窗在折叠处截断）
+   Home: Start here (centered section header + code window cut off at the fold)
    -------------------------------------------------------------------------- */
 .home-start { position: relative; padding: clamp(48px, 7vh, 64px) 24px 0; text-align: center; animation: hero-rise .7s cubic-bezier(.22, .61, .36, 1) .5s both; }
 .home-start-head { max-width: 640px; margin: 0 auto clamp(16px, 2.5vh, 26px); }
@@ -239,7 +239,7 @@ div[class*="language-text"] .lang { display: none; }
 .home-page .home-start-head h2 { margin: 0; padding: 0; border: 0; color: var(--vp-c-text-1); font-size: clamp(1.5rem, 2.2vw, 1.9rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 680; }
 .home-page .home-start-desc { margin: 12px 0 0; color: var(--vp-c-text-2); font-size: 17px; line-height: 1.7; }
 .home-code { width: min(100%, 700px); margin: 0 auto; overflow: hidden; border: 1px solid transparent; border-radius: 10px; background: linear-gradient(var(--vp-code-block-bg), var(--vp-code-block-bg)) padding-box, linear-gradient(155deg, color-mix(in srgb, var(--vp-c-brand-1) 40%, var(--vp-c-divider)), var(--vp-c-divider) 42%) border-box; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 1px 2px rgba(22, 23, 20, .18), 0 20px 46px rgba(22, 23, 20, .22), 0 0 90px color-mix(in srgb, var(--vp-c-brand-1) 9%, transparent); text-align: left; transition: box-shadow 700ms ease, transform 700ms cubic-bezier(.22, .61, .36, 1); }
-/* 进入视口后的一次性聚焦（IntersectionObserver 触发，见 HomePage.vue） */
+/* One-time focus after entering the viewport (triggered by IntersectionObserver, see HomePage.vue) */
 .home-code.is-focus { transform: translateY(-3px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 2px 4px rgba(22, 23, 20, .2), 0 26px 56px rgba(22, 23, 20, .26), 0 0 120px color-mix(in srgb, var(--vp-c-brand-1) 16%, transparent); }
 .home-code-bar { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, .08); color: #8e948b; font-family: var(--vp-font-family-mono); font-size: 11px; letter-spacing: .02em; }
 .home-code-dots { display: inline-flex; gap: 6px; }
@@ -247,7 +247,7 @@ div[class*="language-text"] .lang { display: none; }
 .home-code-dots i:nth-child(1) { background: #c06455; }
 .home-code-dots i:nth-child(2) { background: #c99a4e; }
 .home-code-dots i:nth-child(3) { background: #7ba05b; }
-/* 编辑器手感：行距 1.22，无结构空行（用户确认去掉） */
+/* Editor feel: line height 1.22, no structural blank lines (removal confirmed by the user) */
 .home-code pre { margin: 0; padding: 15px 24px 17px; overflow: auto; color: #e5e4dc; font: 15px/1.68 var(--vp-font-family-mono); }
 .home-code code { display: block; min-width: max-content; counter-reset: line; }
 .home-code .line { display: block; counter-increment: line; }
@@ -256,11 +256,11 @@ div[class*="language-text"] .lang { display: none; }
 .home-code em { color: #d4b37b; font-style: normal; }
 
 /* --------------------------------------------------------------------------
-   布局与响应式
+   Layout and responsiveness
    -------------------------------------------------------------------------- */
 @media (min-width: 960px) {
   .VPDoc.has-aside .content-container { max-width: 760px; }
-  /* 双写 .VPDoc 提升优先级：默认主题同选择器同优先级且可能排在后面，直接写会失效 */
+  /* Doubled .VPDoc raises specificity: the default theme has the same selector at the same specificity and may come later, so writing it once has no effect */
   .VPDoc.VPDoc:not(.has-sidebar) .container,
   .VPDoc.VPDoc:not(.has-sidebar) .content-container { width: 100%; max-width: 1280px; }
   .VPDoc.VPDoc:not(.has-sidebar) .content { width: 100%; max-width: none; }
@@ -276,7 +276,7 @@ div[class*="language-text"] .lang { display: none; }
   .home-page .home-copy h1 { font-size: clamp(2.9rem, 13vw, 4rem); white-space: normal; }
   .home-hero { padding-top: 44px; }
   .home-page .home-copy p { font-size: 1.05rem; }
-  /* 窄屏轨道加宽出血，标签由 JS 切换为外朝向（见 AgentOrbit.vue） */
+  /* Narrow-screen orbit gets a wider bleed; JS switches labels to face outward (see AgentOrbit.vue) */
   .agent-orbit { width: 112%; max-width: none; margin-left: -6%; }
   .orbit-node { font-size: 10.5px; }
   .orbit-node .node-dot { width: 7px; height: 7px; }

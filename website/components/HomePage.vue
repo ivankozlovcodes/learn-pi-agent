@@ -2,11 +2,14 @@
 import { withBase } from "vitepress";
 import { onMounted, ref } from "vue";
 import AgentOrbit from "./AgentOrbit.vue";
+import { useSiteCopy } from "../.vitepress/theme/useSiteCopy";
+
+const { copy, prefix } = useSiteCopy();
 
 const codeWindow = ref<HTMLElement>();
 
 onMounted(() => {
-  // 代码窗进入视口时一次性轻微聚焦（reduced-motion 跳过）
+  // One-time subtle focus when the code window enters the viewport (skipped under reduced-motion)
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const el = codeWindow.value;
@@ -37,15 +40,15 @@ onMounted(() => {
         </p>
 
         <p>
-          从一次 LLM 调用开始，<br />
-          逐步重建 Pi 的 Agent Harness。
+          {{ copy.home.leadLine1 }}<br />
+          {{ copy.home.leadLine2 }}
         </p>
 
         <a
           class="home-cta"
-          :href="withBase('chapters/00-minimal-llm-call')"
+          :href="withBase(prefix + 'chapters/00-minimal-llm-call')"
         >
-          开始阅读 <span aria-hidden="true">→</span>
+          {{ copy.home.cta }} <span aria-hidden="true">→</span>
         </a>
       </div>
 
@@ -61,7 +64,7 @@ onMounted(() => {
       <div
         ref="codeWindow"
         class="home-code"
-        aria-label="Agent loop 示例"
+        :aria-label="copy.home.codeAriaLabel"
       >
         <div class="home-code-bar">
           <span class="home-code-dots" aria-hidden="true">
@@ -70,7 +73,7 @@ onMounted(() => {
           <span>agent-loop.ts</span>
         </div>
 
-        <!-- span 之间不能有任何空白文本节点：pre 会把源码换行渲染成幻影空行 -->
+        <!-- No whitespace text nodes between spans: pre would render source newlines as phantom blank lines -->
         <pre><code><span class="line"><b>while</b> (<em>true</em>) {</span><span class="line">  <b>const</b> assistant = <em>await</em> callModel(context);</span><span class="line">  context.messages.push(assistant);</span><span class="line">  <b>if</b> (!hasToolCalls(assistant)) {</span><span class="line">    <em>break</em>;</span><span class="line">  }</span><span class="line">  <b>const</b> results = <em>await</em> executeTools(assistant.toolCalls);</span><span class="line">  context.messages.push(...results);</span><span class="line">}</span></code></pre>
       </div>
     </section>

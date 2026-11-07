@@ -1,127 +1,161 @@
 /**
- * learn-pi-agent 文档站配置（VitePress）。
- * SEO 要点：稳定 URL、唯一描述、OG 标签、JSON-LD、sitemap、章节地图侧栏。
+ * VitePress config for the learn-pi-agent docs site.
+ * SEO essentials: stable URLs, unique descriptions, OG tags, JSON-LD, sitemap, chapter-map sidebar.
+ * Locales: Chinese at the root (unchanged URLs), English at /en/. UI copy lives in ./i18n/{zh,en}.ts.
  *
- * 发布：GitHub Actions 构建并部署到 GitHub Pages。
+ * Publishing: GitHub Actions builds and deploys to GitHub Pages.
  */
-import { defineConfig } from "vitepress";
+import { defineConfig, type DefaultTheme, type HeadConfig } from "vitepress";
+import { en } from "./i18n/en";
+import { zh, type SiteCopy } from "./i18n/zh";
 
-/** GitHub Pages 项目站路径（仓库名 learn-pi-agent；发布到自定义域名或改部署方式时调整）。 */
+/** GitHub Pages project-site path (repo name learn-pi-agent; adjust when moving to a custom domain or changing deployment). */
 const BASE = "/learn-pi-agent/";
+/** Actual GitHub Pages URL (keep in sync with sitemap.hostname). */
+const SITE_URL = "https://yiz-hhh.github.io/learn-pi-agent/";
 
-export default defineConfig({
-  title: "Learn Pi Agent",
-  description: "从一次最小的 LLM 调用开始，逐步实现 Pi Agent 的核心机制。",
-  lang: "zh-CN",
-  base: BASE,
-  cleanUrls: true,
-  lastUpdated: true,
-  appearance: "dark",
-  markdown: {
-    // 代码块背景在两个主题下都是深色（--vp-code-block-bg），
-    // 若用默认双主题 Shiki，light 模式下会套用浅色 token（深字-on-深底，不可读）。
-    theme: "github-dark",
+/**
+ * Chinese sidebar. scripts/check-docs.mjs regex-reads these literal entries,
+ * so they stay spelled out here; the English sidebar is derived from them.
+ */
+const zhSidebar: DefaultTheme.SidebarItem[] = [
+  {
+    text: "Part I · Agent Core",
+    collapsed: false,
+    items: [
+      { text: "00 · Minimal LLM Call", link: "/chapters/00-minimal-llm-call" },
+      { text: "01 · Tool-driven Agent", link: "/chapters/01-tool-driven-agent" },
+      { text: "02 · Agent Runtime", link: "/chapters/02-agent-runtime" },
+      { text: "03 · Tool Runtime", link: "/chapters/03-tool-runtime" },
+      { text: "04 · Parallel Tool Execution", link: "/chapters/04-parallel-tools" },
+      { text: "05 · Steering & Follow-up", link: "/chapters/05-steering-followup" },
+      { text: "06 · Context Transformation", link: "/chapters/06-context-transform" },
+    ],
   },
-  sitemap: {
-    // GitHub Pages 实际地址（部署方式变化时同步调整）
-    hostname: "https://yiz-hhh.github.io/learn-pi-agent/",
+  {
+    text: "Part II · Agent Harness",
+    collapsed: false,
+    items: [
+      { text: "07 · Session Tree", link: "/chapters/07-session-tree" },
+      { text: "08 · Context Compaction", link: "/chapters/08-context-compaction" },
+      { text: "09 · Skills", link: "/chapters/09-skills" },
+    ],
   },
-  head: [
+  {
+    text: "Part III · Extensibility",
+    collapsed: false,
+    items: [
+      { text: "10 · Extension Runtime", link: "/chapters/10-extension-runtime" },
+      { text: "11 · Extension Composition", link: "/chapters/11-extension-composition" },
+    ],
+  },
+  {
+    text: "Part IV · Product",
+    collapsed: false,
+    items: [{ text: "12 · Coding Agent", link: "/chapters/12-coding-agent" }],
+  },
+];
+
+/** English sidebar: same (already English) titles, links prefixed with /en. */
+const enSidebar: DefaultTheme.SidebarItem[] = zhSidebar.map((group) => ({
+  ...group,
+  items: group.items?.map((item) => ({ ...item, link: `/en${item.link}` })),
+}));
+
+/** Per-locale head: OG/keywords/JSON-LD text comes from the locale copy. */
+function localeHead(copy: SiteCopy, pageUrl: string, ogImage: string): HeadConfig[] {
+  return [
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "learn-pi-agent" }],
-    ["meta", { property: "og:url", content: "https://yiz-hhh.github.io/learn-pi-agent/" }],
+    ["meta", { property: "og:url", content: pageUrl }],
     ["meta", { name: "twitter:card", content: "summary" }],
-    ["meta", { property: "og:title", content: "learn-pi-agent：Pi Agent 架构中文教程" }],
-    ["meta", { property: "og:description", content: "从最小 LLM Loop 开始，用 TypeScript 和离线测试逐步重建 Pi Agent 的 Core、Harness、Extension 与 Coding Agent" }],
-    ["meta", { property: "og:locale", content: "zh_CN" }],
-    ["meta", { name: "keywords", content: "Pi Agent, LLM Agent 教程, Agent Loop, Tool Calling, TypeScript, Session Tree, Context Compaction, Extension Runtime, Coding Agent, 中文教程" }],
-    ["meta", { property: "og:image", content: "https://yiz-hhh.github.io/learn-pi-agent/og-cover.svg" }],
+    ["meta", { property: "og:title", content: copy.meta.ogTitle }],
+    ["meta", { property: "og:description", content: copy.meta.ogDescription }],
+    ["meta", { property: "og:locale", content: copy.meta.ogLocale }],
+    ["meta", { name: "keywords", content: copy.meta.keywords }],
+    ["meta", { property: "og:image", content: `${SITE_URL}${ogImage}` }],
     ["link", { rel: "icon", href: "/learn-pi-agent/favicon.svg", type: "image/svg+xml" }],
     ["script", { type: "application/ld+json" }, JSON.stringify({
       "@context": "https://schema.org",
       "@type": "WebSite",
       name: "learn-pi-agent",
-      url: "https://yiz-hhh.github.io/learn-pi-agent/",
-      description: "从最小 LLM 调用开始，逐步重建 Pi Agent Harness。",
+      url: pageUrl,
+      description: copy.meta.jsonLdDescription,
     })],
-  ],
+  ];
+}
+
+/** Per-locale theme labels and navigation. */
+function localeThemeConfig(
+  copy: SiteCopy,
+  chaptersPath: string,
+  githubUrl: string,
+  sidebar: DefaultTheme.SidebarItem[],
+): DefaultTheme.Config {
+  return {
+    outline: { label: copy.theme.outlineLabel, level: [2, 3] },
+    docFooter: { prev: copy.theme.docFooterPrev, next: copy.theme.docFooterNext },
+    lastUpdated: { text: copy.theme.lastUpdatedText, formatOptions: { dateStyle: "short", timeStyle: "short" } },
+    darkModeSwitchLabel: copy.theme.darkModeSwitchLabel,
+    sidebarMenuLabel: copy.theme.sidebarMenuLabel,
+    returnToTopLabel: copy.theme.returnToTopLabel,
+    langMenuLabel: copy.theme.langMenuLabel,
+    nav: [
+      { text: copy.theme.navChapters, link: `${chaptersPath}00-minimal-llm-call`, activeMatch: chaptersPath },
+      { text: "GitHub", link: githubUrl },
+    ],
+    sidebar,
+  };
+}
+
+export default defineConfig({
+  title: "Learn Pi Agent",
+  description: zh.description,
+  lang: zh.lang,
+  base: BASE,
+  cleanUrls: true,
+  lastUpdated: true,
+  appearance: "dark",
+  markdown: {
+    // Code block background is dark in both themes (--vp-code-block-bg);
+    // the default dual-theme Shiki would apply light tokens in light mode (dark text on dark background, unreadable).
+    theme: "github-dark",
+  },
+  sitemap: {
+    // Actual GitHub Pages URL (adjust when deployment changes)
+    hostname: SITE_URL,
+  },
+  locales: {
+    root: {
+      label: zh.label,
+      lang: zh.lang,
+      title: "Learn Pi Agent",
+      description: zh.description,
+      head: localeHead(zh, SITE_URL, "og-cover.svg"),
+      themeConfig: localeThemeConfig(zh, "/chapters/", "https://github.com/yiz-hhh/learn-pi-agent", zhSidebar),
+    },
+    en: {
+      label: en.label,
+      lang: en.lang,
+      link: "/en/",
+      title: "Learn Pi Agent",
+      description: en.description,
+      head: localeHead(en, `${SITE_URL}en/`, "og-cover-en.svg"),
+      themeConfig: localeThemeConfig(en, "/en/chapters/", "https://github.com/ivankozlovcodes/learn-pi-agent", enSidebar),
+    },
+  },
   themeConfig: {
     search: {
       provider: "local",
       options: {
         locales: {
-          root: {
-            translations: {
-              button: { buttonText: "搜索", buttonAriaLabel: "搜索" },
-              modal: {
-                displayDetails: "显示详细列表",
-                resetButtonTitle: "重置搜索",
-                backButtonTitle: "关闭搜索",
-                noResultsText: "没有找到相关结果",
-                footer: {
-                  selectText: "选择",
-                  selectKeyAriaLabel: "回车",
-                  navigateText: "切换",
-                  navigateUpKeyAriaLabel: "上箭头",
-                  navigateDownKeyAriaLabel: "下箭头",
-                  closeText: "关闭",
-                  closeKeyAriaLabel: "Esc",
-                },
-              },
-            },
-          },
+          root: { translations: zh.search },
+          en: { translations: en.search },
         },
       },
     },
     footer: {
       message: "MIT License · yiz-hhh",
     },
-    outline: { label: "本章目录", level: [2, 3] },
-    docFooter: { prev: "上一章", next: "下一章" },
-    lastUpdated: { text: "最后更新", formatOptions: { dateStyle: "short", timeStyle: "short" } },
-    darkModeSwitchLabel: "外观",
-    sidebarMenuLabel: "菜单",
-    returnToTopLabel: "回到顶部",
-    nav: [
-      { text: "章节", link: "/chapters/00-minimal-llm-call", activeMatch: "/chapters/" },
-      { text: "GitHub", link: "https://github.com/yiz-hhh/learn-pi-agent" },
-    ],
-    sidebar: [
-      {
-        text: "Part I · Agent Core",
-        collapsed: false,
-        items: [
-          { text: "00 · Minimal LLM Call", link: "/chapters/00-minimal-llm-call" },
-          { text: "01 · Tool-driven Agent", link: "/chapters/01-tool-driven-agent" },
-          { text: "02 · Agent Runtime", link: "/chapters/02-agent-runtime" },
-          { text: "03 · Tool Runtime", link: "/chapters/03-tool-runtime" },
-          { text: "04 · Parallel Tool Execution", link: "/chapters/04-parallel-tools" },
-          { text: "05 · Steering & Follow-up", link: "/chapters/05-steering-followup" },
-          { text: "06 · Context Transformation", link: "/chapters/06-context-transform" },
-        ],
-      },
-      {
-        text: "Part II · Agent Harness",
-        collapsed: false,
-        items: [
-          { text: "07 · Session Tree", link: "/chapters/07-session-tree" },
-          { text: "08 · Context Compaction", link: "/chapters/08-context-compaction" },
-          { text: "09 · Skills", link: "/chapters/09-skills" },
-        ],
-      },
-      {
-        text: "Part III · Extensibility",
-        collapsed: false,
-        items: [
-          { text: "10 · Extension Runtime", link: "/chapters/10-extension-runtime" },
-          { text: "11 · Extension Composition", link: "/chapters/11-extension-composition" },
-        ],
-      },
-      {
-        text: "Part IV · Product",
-        collapsed: false,
-        items: [{ text: "12 · Coding Agent", link: "/chapters/12-coding-agent" }],
-      },
-    ],
   },
 });

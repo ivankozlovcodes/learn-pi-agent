@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { withBase } from "vitepress";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useSiteCopy } from "../.vitepress/theme/useSiteCopy";
+
+const { copy, prefix } = useSiteCopy();
 
 /**
- * 首屏轨道图：Agent Loop 居中，六个核心机制沿椭圆轨道真实运转。
- * - 节点位置由 rAF 参数方程驱动（外轨 46s、中轨 38s 一圈），hover 暂停便于点击；
- * - 标签连续绕节点滑动，始终朝向轨道中心一侧：无翻转跳变，也永不触及视口边缘；
- * - 指针在轨道上移动时，星点/光环/节点分层视差；
- * - prefers-reduced-motion：不启动动画，停留在 SSR 静态位置（即首帧），无闪烁。
+ * Above-the-fold orbit diagram: Agent Loop in the center, six core mechanisms actually orbiting along elliptical rings.
+ * - Node positions are driven by rAF parametric equations (outer ring 46s, middle ring 38s per lap); hover pauses for easier clicking;
+ * - Labels slide continuously around their nodes, always on the side facing the orbit center: no flip jumps, never touching the viewport edge;
+ * - When the pointer moves over the orbit, stars/halo/nodes get layered parallax;
+ * - prefers-reduced-motion: no animation starts; nodes stay at the static SSR position (the first frame), no flicker.
  */
 /**
- * 三条轨道按「离 Agent Loop 的语义距离」分配：
- * 内轨 Provider/Context（循环直接调用的模型与数据），
- * 中轨 Tool Runtime/Session（循环内执行与持久化），
- * 外轨 Skills/Extensions（外层能力注入与扩展）。
+ * The three rings are assigned by "semantic distance from the Agent Loop":
+ * inner ring Provider/Context (the model and data the loop calls directly),
+ * middle ring Tool Runtime/Session (execution and persistence inside the loop),
+ * outer ring Skills/Extensions (outer capability injection and extension).
  */
 const nodes = [
   { key: "skills", label: "Skills", slug: "chapters/09-skills", ring: 0, angle: -100 },
@@ -24,7 +27,7 @@ const nodes = [
   { key: "provider", label: "Provider", slug: "chapters/00-minimal-llm-call", ring: 2, angle: 200 },
 ];
 
-/** 轨道几何：与 SVG viewBox（720×280）同一坐标系，写入样式时换算为百分比。 */
+/** Orbit geometry: same coordinate system as the SVG viewBox (720×280), converted to percentages when written to styles. */
 const CENTER = { x: 360, y: 140 };
 const RINGS = [
   { rx: 330, ry: 118, degPerSec: 360 / 46 },
@@ -40,9 +43,9 @@ const pointAt = (ring: number, deg: number) => {
   };
 };
 /**
- * 标签锚点：沿轨道切线方向尾随节点（与运动方向相反），
- * 标签始终留在本轨道的高度带——不压中心文字、不跨环碰撞、连续无跳变。
- * SSR 按字符数估算标签宽度，挂载后实测纠正。
+ * Label anchor: trails the node along the orbit tangent (opposite to the direction of motion),
+ * so the label always stays within its own ring's height band: never covering the center text, never colliding across rings, continuous with no jumps.
+ * SSR estimates label width from the character count; it is corrected by measurement after mount.
  */
 const LABEL_GAP = 11;
 const estimateLabelW = (label: string) => label.length * 7.4 + 4;
@@ -56,7 +59,7 @@ const initial = nodes.map((n) => {
   return { x: p.x, y: p.y, ...a };
 });
 
-/** 星点：固定坐标撒在轨道间隙，CSS 里按各自 delay 呼吸闪烁。[x, y, r, delay(s)] */
+/** Stars: fixed coordinates scattered in the gaps between rings, twinkling with their own delay in CSS. [x, y, r, delay(s)] */
 const stars: [number, number, number, number][] = [
   [52, 36, 1.2, 0], [96, 78, 0.9, 1.2], [86, 210, 1.4, 0.6], [160, 250, 0.8, 2],
   [230, 30, 1.0, 1.6], [300, 14, 1.3, 0.3], [440, 14, 0.9, 2.4], [516, 34, 1.2, 1],
@@ -66,17 +69,17 @@ const stars: [number, number, number, number][] = [
 
 const orbitRoot = ref<HTMLElement>();
 const orbitNav = ref<HTMLElement>();
-/** hover 的节点：既用于 rAF 暂停，也驱动中心文字联动（reactive）。 */
+/** Hovered node: used both to pause rAF and to drive the linked center text (reactive). */
 const hovered = ref<string | null>(null);
 const setHovered = (key: string | null) => { hovered.value = key; };
 const centerLabel = computed(() => (hovered.value ? nodes.find((n) => n.key === hovered.value)?.label : null) ?? "Agent Loop");
 const centerColor = computed(() => (hovered.value ? `var(--acc-${hovered.value})` : undefined));
-/** 窄屏（≤719px）：标签朝外、深度压差放宽（见 tick）。 */
+/** Narrow screens (≤719px): labels face outward, depth contrast is relaxed (see tick). */
 const compact = ref(false);
 let dispose: () => void = () => {};
 
 onMounted(() => {
-  // 减弱动态效果：保持 SSR 静态位置，不启动任何循环
+  // Reduced motion: keep the static SSR position, start no loop
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const root = orbitRoot.value;
   const els = Array.from(orbitNav.value?.querySelectorAll<HTMLElement>(".orbit-node") ?? []);
@@ -92,19 +95,19 @@ onMounted(() => {
   root.addEventListener("pointermove", onPointerMove);
   root.addEventListener("pointerleave", onPointerLeave);
 
-  // 窄屏模式：标签朝外、间距收紧
+  // Narrow-screen mode: labels face outward, tighter spacing
   const mq = window.matchMedia("(max-width: 719px)");
   compact.value = mq.matches;
   const onMqChange = (e: MediaQueryListEvent) => { compact.value = e.matches; };
   mq.addEventListener("change", onMqChange);
 
-  // 实测标签宽度（随断点字号变化），用于计算标签锚点距离
+  // Measure label widths (they change with breakpoint font sizes) to compute label anchor distances
   let labelW = els.map((el) => el.querySelector<HTMLElement>(".node-label")?.getBoundingClientRect().width ?? 0);
   const onResize = () => {
     labelW = els.map((el) => el.querySelector<HTMLElement>(".node-label")?.getBoundingClientRect().width ?? 0);
   };
   window.addEventListener("resize", onResize);
-  // 入场动画结束后交还 opacity/scale 控制权（fill:both 否则会一直压住内联值）
+  // Hand opacity/scale control back after the entrance animation (otherwise fill:both keeps overriding the inline values)
   els.forEach((el) => el.addEventListener("animationend", () => { el.style.animation = "none"; }, { once: true }));
 
   let raf = 0;
@@ -126,8 +129,8 @@ onMounted(() => {
       el.style.top = `${y + parallax.y * 2.2}%`;
       el.style.setProperty("--lx", `${lx.toFixed(1)}px`);
       el.style.setProperty("--ly", `${ly.toFixed(1)}px`);
-      // 深度线索：顶部为远侧（小、暗、退到核心光晕后方），底部为近侧（大、亮、在前）；
-      // 窄屏放宽压差保证可读性
+      // Depth cue: the top is the far side (small, dim, behind the core glow), the bottom is the near side (large, bright, in front);
+      // narrow screens relax the contrast to stay readable
       const depth = (Math.sin(rad) + 1) / 2;
       if (compact.value) {
         el.style.scale = (0.94 + depth * 0.1).toFixed(3);
@@ -158,7 +161,7 @@ onBeforeUnmount(() => dispose());
     <div class="orbit-aurora" aria-hidden="true"></div>
     <svg class="orbit-svg" viewBox="0 0 720 280" fill="none" aria-hidden="true">
       <defs>
-        <!-- 环描边纵向渐变：顶部（远侧）暗 → 底部（近侧）亮，俯视角度的光照暗示 -->
+        <!-- Vertical gradient on ring strokes: dark at the top (far side) → bright at the bottom (near side), a lighting hint for the top-down view -->
         <linearGradient id="ring-depth" x1="0" y1="0" x2="0" y2="1">
           <stop class="stop-far" offset="0%" />
           <stop class="stop-near" offset="62%" />
@@ -189,7 +192,7 @@ onBeforeUnmount(() => dispose());
         <span :key="centerLabel" :style="centerColor ? { color: centerColor } : undefined">{{ centerLabel }}</span>
       </Transition>
     </div>
-    <nav ref="orbitNav" class="orbit-nav" aria-label="核心机制直达章节">
+    <nav ref="orbitNav" class="orbit-nav" :aria-label="copy.orbit.navAriaLabel">
       <a
         v-for="(node, i) in nodes"
         :key="node.key"
@@ -201,7 +204,7 @@ onBeforeUnmount(() => dispose());
           '--lx': `${initial[i].lx.toFixed(1)}px`,
           '--ly': `${initial[i].ly.toFixed(1)}px`,
         }"
-        :href="withBase(node.slug)"
+        :href="withBase(prefix + node.slug)"
         @mouseenter="setHovered(node.key)"
         @mouseleave="setHovered(null)"
         @focus="setHovered(node.key)"
