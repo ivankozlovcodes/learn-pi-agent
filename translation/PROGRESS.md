@@ -1,6 +1,6 @@
 # English translation — progress
 
-- **Phase:** 2 — translation (running)
+- **Phase:** done (2026-11-07)
 - **Upstream SHA:** fc9dbf67d68743d79ea6b44361faadfeebab4985 (yiz-hhh/learn-pi-agent `main`)
 - **Fork:** https://github.com/ivankozlovcodes/learn-pi-agent (`main` = upstream mirror, `en-translation` = integration)
 
@@ -39,16 +39,16 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | 09 | chapters/09-skills/** | merged | 0432fb0 |
 | 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | merged | 0e23ca5 |
 | 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | merged | dc117d4 |
-| 12 | chapters/12-coding-agent/** | running | |
-| root | README.en.md alignment + upstream credit (parent, Phase 4) | pending | |
+| 12 | chapters/12-coding-agent/** | merged | 2be6780 |
+| root | README.en.md alignment + upstream credit (parent) | merged | b1b01e8 |
 
 ## Open review findings
 - Review wave 1 (Opus reviewers, read-only): `translation/reviews/ch00-03.md` (12 low), `ch04-07.md` (14 low, 10 med: glossary drift on truncation guard / sequential, full-width punctuation), `ch08-11-site.md` (23 low, 2 med). No high.
 - Full-width punctuation leftovers: fixed by the parent (f86a549); residue check now also flags CJK punctuation.
-- Remaining findings: fix workers per group (running).
+- Wave 1 fixes merged (07fda1f, d247087, 9c051a2); cross-copy term sweep 349d19d. Final reviews (`reviews/ch12.md`, `reviews/cross-cutting.md`) applied in ef268e9. Skips are recorded in the report.
 
 ## Next action
-12 running (last chapter). Then consistency check + Phase 3 verification. (A 429 at ~02:30 interrupted 08/11; they were resumed in place at 03:00 and merged.)
+None. Deployed: https://minerva.tail9e3eb4.ts.net/learn-pi-agent/en/ (user unit `learn-pi-agent-en`, tailscale serve path `/learn-pi-agent`). Still open for the owner: set the default branch to `en-translation` (the gh token lacks admin). Report: vault `pi/2026-11-07 learn-pi-agent english`.
 
 ## Notes
 - Lanes must not run `npm ci`: worktree `node_modules` symlinks to the main checkout (it was wiped once and restored; after 01–03 + 07 the full suite is green, 211 tests).
