@@ -29,7 +29,7 @@ async function main(): Promise<void> {
         console.log(`\n== ${event.type}`);
         break;
       case "turn_start":
-        console.log("  -- Turn start");
+        console.log("  -- turn start");
         break;
       case "message_update":
         // The real adapter only produces updates for text_delta (tool-call turns have no delta events; their arrival shows up as the toolResult message)
@@ -47,13 +47,13 @@ async function main(): Promise<void> {
         if (event.message.role === "assistant" && event.message.text) console.log("");
         break;
       case "turn_end":
-        console.log(`  -- Turn end (toolResults: ${event.toolResults.length})`);
+        console.log(`  -- turn end (toolResults: ${event.toolResults.length})`);
         break;
     }
   }
 
   const messages = await stream.result();
-  console.log(`\n=== Final reply: ${messages.at(-1)?.text ?? "(no reply)"}`);
+  console.log(`\n=== Final reply: ${messages.at(-1)?.text ?? "(none)"}`);
 }
 
 main().catch((error: unknown) => {
