@@ -1,10 +1,10 @@
-# 验证技能（verify）
+# Verification skill (verify)
 
-修复流程：修改 src/calculator.ts 后必须运行 `npm test` 验证，测试全部通过才算完成。
+Fix workflow: after changing src/calculator.ts you must run `npm test` to validate; the task is done only when all tests pass.
 
-具体步骤：
-1. 先用 read_file 读取 src/calculator.ts 与 tests/calculator.test.ts，理解期望行为；
-2. 用 edit 或 write_file 修复 bug；
-3. 用 bash 运行 `npm test`；
-4. 若测试仍失败，读回测试输出与源码，继续修改，直到输出「全部测试通过」；
-5. 在最终回复里说明修复内容与测试结果。
+Steps:
+1. First use read_file to read src/calculator.ts and tests/calculator.test.ts and understand the expected behavior;
+2. Fix the bug with edit or write_file;
+3. Run `npm test` with bash;
+4. If the tests still fail, read back the test output and the source, and keep fixing until the output says "All tests passed";
+5. In the final reply, describe the fix and the test results.

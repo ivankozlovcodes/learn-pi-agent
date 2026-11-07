@@ -1,9 +1,9 @@
 /**
- * 计算器：E2E 场景的修复对象。
- * 注意：add 的实现含故意 bug（误写成减法），测试会失败，供 Coding Agent 定位与修复。
+ * Calculator: the fix target of the E2E scenario.
+ * Note: the add implementation has a deliberate bug (written as subtraction by mistake), so the tests fail; the Coding Agent locates and fixes it.
  */
 export function add(a: number, b: number): number {
-  return a - b; // bug：应为 a + b
+  return a - b; // bug: should be a + b
 }
 
 export function multiply(a: number, b: number): number {

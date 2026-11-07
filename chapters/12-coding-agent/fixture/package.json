@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "12 章 E2E 临时项目：含故意 bug 的计算器（供 Coding Agent 修复与验证）",
+  "description": "Chapter 12 E2E temp project: a calculator with a deliberate bug (for the Coding Agent to fix and validate)",
   "devDependencies": {
     "tsx": "*"
   },

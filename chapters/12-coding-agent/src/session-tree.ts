@@ -1,50 +1,50 @@
 /**
- * 08 章核心（session 层）：07 章 Entry 树 + CompactionEntry 与重建投影。
- * 12 章组装复用：本文件与 08 章对应文件保持一致（Product Assembly 的会话层同步副本）。
+ * Chapter 08 core (session layer): the Chapter 07 Entry tree + CompactionEntry and the reconstruction projection.
+ * Chapter 12 assembly reuse: this file matches its Chapter 08 counterpart (the synced copy of the session layer for Product Assembly).
  *
- * 07 章基线（机制不变）：
- * - Entry{type,id,parentId,timestamp}：coding-agent v3 SessionEntryBase 子集
- * - append 写 leaf 并前移（Pi _appendEntry session-manager.ts L1045-1050）
- * - branch：只移 leaf 指针，不改删任何 entry（L1361-1366）
- * - getBranch：沿 parentId 向根查询后反序（L1261-1271）
- * - getTree / load：沿用 07 章
+ * Chapter 07 baseline (mechanism unchanged):
+ * - Entry{type,id,parentId,timestamp}: a subset of coding-agent v3 SessionEntryBase
+ * - append writes at the leaf and moves it forward (Pi _appendEntry session-manager.ts L1045-1050)
+ * - branch: only moves the leaf pointer, never changes or deletes an entry (L1361-1366)
+ * - getBranch: walks parentId toward the root, then reverses (L1261-1271)
+ * - getTree / load: same as Chapter 07
  *
- * 08 章新增（全部锚定 coding-agent 产品栈 session-manager.ts，非低层 harness）：
- * - CompactionEntry（L69-80 教学子集：summary/firstKeptEntryId/tokensBefore；
- *   details/usage/fromHook 剪裁）
- * - appendCompaction（L1097-1120）：与普通 Entry 完全相同的 append 机制，
- *   parentId = 当前 leaf，append 后 leaf 前移。不做任何删除/改写/side channel。
- * - buildContextEntries（L418-454）：active path → latest compaction →
- *   [compaction] + 从 firstKeptEntryId 起的保留 entries + compaction 之后全部。
- *   firstKeptEntryId 找不到时不抛错，降级为 [compaction] + 之后（Pi 同款宽容）。
- * - buildSessionContext（L461-470）：buildContextEntries → 逐 entry 投影 → Message[]。
- * - sessionEntryToContextMessages（L383-408 子集）：compaction entry 投影为
- *   带标记的 summary 消息（Pi 内部 role=compactionSummary → provider user；
- *   教学 Message 三角色无该 role，直接投影为 user + 前缀/后缀文本）。
+ * New in Chapter 08 (all anchored in the coding-agent product stack's session-manager.ts, not the low-level harness):
+ * - CompactionEntry (teaching subset of L69-80: summary/firstKeptEntryId/tokensBefore;
+ *   details/usage/fromHook trimmed)
+ * - appendCompaction (L1097-1120): exactly the same append mechanism as a regular Entry,
+ *   parentId = current leaf, leaf moves forward after append. No deletion, rewriting or side channel.
+ * - buildContextEntries (L418-454): active path → latest compaction →
+ *   [compaction] + retained entries from firstKeptEntryId + everything after the compaction.
+ *   If firstKeptEntryId is not found, it does not throw; it falls back to [compaction] + what follows (same leniency as Pi).
+ * - buildSessionContext (L461-470): buildContextEntries → per-entry projection → Message[].
+ * - sessionEntryToContextMessages (subset of L383-408): a compaction entry is projected into
+ *   a marked summary message (Pi internally uses role=compactionSummary → provider user;
+ *   the teaching Message has only three roles and no such role, so it is projected directly as user + prefix/suffix text).
  *
- * Compaction as an Entry：压缩以「追加一个持久化 entry」为形态；
- * 历史不删不改（getEntries 契约与 Pi L1297-1304 一致），缩短 context 靠重建投影。
+ * Compaction as an Entry: Compaction takes the form of "appending one persisted entry";
+ * history is never deleted or changed (the getEntries contract matches Pi L1297-1304); the context gets shorter through the reconstruction projection.
  *
- * 采用 firstKeptEntryId 模型（产品栈），不采用低层 harness 的 retainedTail 快照模型。
+ * Uses the firstKeptEntryId model (product stack), not the low-level harness's retainedTail snapshot model.
  */
 import { randomUUID } from "node:crypto";
 import type { Message } from "../../00-minimal-llm-call/src/index.ts";
 
-/** Entry 基座：Pi EntryBase（harness/session/types.ts L14-20）的教学子集（无 seq，ISO 时间戳与 v3 格式一致）。 */
+/** Entry base: a teaching subset of Pi EntryBase (harness/session/types.ts L14-20) (no seq; ISO timestamp, as in the v3 format). */
 export interface EntryBase {
   type: string;
   id: string;
   parentId: string | null;
-  timestamp: string; // ISO（coding-agent v3 格式：new Date().toISOString()）
+  timestamp: string; // ISO (coding-agent v3 format: new Date().toISOString())
 }
 
-/** 消息 entry：承载对话消息（Pi MessageEntry）。 */
+/** Message entry: carries a conversation message (Pi MessageEntry). */
 export interface MessageEntry extends EntryBase {
   type: "message";
   message: Message;
 }
 
-/** 自定义 entry：扩展状态持久化，不参与 LLM 上下文（Pi CustomEntry，session-format.md）。 */
+/** Custom entry: persists Extension state, not part of the LLM context (Pi CustomEntry, session-format.md). */
 export interface CustomEntry extends EntryBase {
   type: "custom";
   customType: string;
@@ -52,11 +52,11 @@ export interface CustomEntry extends EntryBase {
 }
 
 /**
- * 压缩 entry（Pi CompactionEntry，session-manager.ts L69-80 的教学子集）：
- * - summary：被压前缀的 LLM 摘要（持久化的压缩物）
- * - firstKeptEntryId：压缩后第一个被保留 entry 的 id（重建投影的切片开关）
- * - tokensBefore：压缩前 canonical context 的估算 token 数
- * 剪裁：details/usage/fromHook 不恢复（扩展/成本元数据，教学不展开）。
+ * Compaction entry (Pi CompactionEntry, teaching subset of session-manager.ts L69-80):
+ * - summary: the LLM summary of the compacted prefix (the persisted result of Compaction)
+ * - firstKeptEntryId: id of the first entry retained after Compaction (the slicing switch of the reconstruction projection)
+ * - tokensBefore: estimated token count of the canonical context before Compaction
+ * Trimmed: details/usage/fromHook are not rebuilt (Extension/cost metadata, not covered in teaching).
  */
 export interface CompactionEntry extends EntryBase {
   type: "compaction";
@@ -65,22 +65,22 @@ export interface CompactionEntry extends EntryBase {
   tokensBefore: number;
 }
 
-/** Entry 联合：教学子集（message/custom/compaction；model_change/branch_summary 等教学不展开）。 */
+/** Entry union: teaching subset (message/custom/compaction; model_change/branch_summary etc. are not covered in teaching). */
 export type Entry = MessageEntry | CustomEntry | CompactionEntry;
 
-/** 树节点（getTree 用）：entry + 子节点。 */
+/** Tree node (used by getTree): entry + child nodes. */
 export interface TreeNode {
   entry: Entry;
   children: TreeNode[];
 }
 
-/** 摘要消息标记（Pi coding-agent messages.ts L11-20，逐字一致）。 */
+/** Summary message markers (Pi coding-agent messages.ts L11-20, verbatim). */
 export const COMPACTION_SUMMARY_PREFIX =
   "The conversation history before this point was compacted into the following summary:\n\n<summary>\n";
 export const COMPACTION_SUMMARY_SUFFIX = "\n</summary>";
 
 /**
- * 生成唯一短 ID（8 位 hex，碰撞检查）：Pi generateId（session-manager.ts L221，randomUUID().slice(0,8)）。
+ * Generate a unique short ID (8 hex chars, collision-checked): Pi generateId (session-manager.ts L221, randomUUID().slice(0,8)).
  */
 export function generateId(existing: ReadonlySet<string>): string {
   for (let i = 0; i < 100; i++) {
@@ -91,10 +91,10 @@ export function generateId(existing: ReadonlySet<string>): string {
 }
 
 /**
- * 单个 entry → LLM 上下文消息（Pi sessionEntryToContextMessages L383-408 的教学子集）。
- * - message → 原消息
- * - compaction → 带标记的 user 摘要消息（教学投影，见文件头 divergence 说明）
- * - custom → 不产消息（扩展状态不进 LLM 上下文）
+ * A single entry → LLM context messages (teaching subset of Pi sessionEntryToContextMessages L383-408).
+ * - message → the original message
+ * - compaction → a marked user summary message (teaching projection, see the divergence note in the file header)
+ * - custom → no message (Extension state stays out of the LLM context)
  */
 export function sessionEntryToContextMessages(entry: Entry): Message[] {
   if (entry.type === "message") {
@@ -107,54 +107,54 @@ export function sessionEntryToContextMessages(entry: Entry): Message[] {
 }
 
 /**
- * 会话树：append-only entry 树 + current leaf 指针（Pi SessionManager 的教学子集）。
- * 所有写入都 append（entry 从不修改删除），分支只移动 leaf 指针。
+ * Session tree: append-only entry tree + current leaf pointer (a teaching subset of Pi SessionManager).
+ * Every write is an append (entries are never modified or deleted); branching only moves the leaf pointer.
  */
 export class TreeSession {
   private entries: Entry[] = [];
   private byId = new Map<string, Entry>();
   private _leafId: string | null = null;
 
-  /** 当前 leaf（Pi getLeafId，L1196）。 */
+  /** Current leaf (Pi getLeafId, L1196). */
   getLeafId(): string | null {
     return this._leafId;
   }
 
-  /** 按 id 查 entry（Pi getEntry，L1204）。 */
+  /** Look up an entry by id (Pi getEntry, L1204). */
   getEntry(id: string): Entry | undefined {
     return this.byId.get(id);
   }
 
-  /** 全部 entry（文件顺序，不含头；Pi getEntries，L1302——append-only，返回浅拷贝）。 */
+  /** All entries (file order, without the header; Pi getEntries, L1302: append-only, returns a shallow copy). */
   getEntries(): Entry[] {
     return [...this.entries];
   }
 
-  /** entry 的直接子节点（Pi getChildren，L1211）。 */
+  /** Direct children of an entry (Pi getChildren, L1211). */
   getChildren(parentId: string): Entry[] {
     return this.entries.filter((e) => e.parentId === parentId);
   }
 
-  /** append 消息为当前 leaf 的子节点，然后 leaf 前移；返回完整 entry（Pi appendMessage L1058 + _appendEntry L1045）。 */
+  /** Append a message as a child of the current leaf, then move the leaf forward; returns the full entry (Pi appendMessage L1058 + _appendEntry L1045). */
   appendMessage(message: Message): MessageEntry {
     return this.append({ type: "message", message } as MessageEntry);
   }
 
-  /** append 自定义 entry（扩展状态，不进 LLM 上下文；Pi appendCustomEntry L1123）。 */
+  /** Append a custom entry (Extension state, kept out of the LLM context; Pi appendCustomEntry L1123). */
   appendCustomEntry(customType: string, data?: unknown): CustomEntry {
     return this.append({ type: "custom", customType, data } as CustomEntry);
   }
 
   /**
-   * append 压缩 entry 为当前 leaf 的子节点，然后 leaf 前移（Pi appendCompaction L1097-1120）。
-   * 语义锁定：parentId = 旧 leaf；append 后 leaf = CompactionEntry.id。
-   * 与普通 append 共用同一机制：不删除、不修改任何旧 entry，不写回旧 MessageEntry。
+   * Append a compaction entry as a child of the current leaf, then move the leaf forward (Pi appendCompaction L1097-1120).
+   * Locked semantics: parentId = the old leaf; after append, leaf = CompactionEntry.id.
+   * Shares the same mechanism as a regular append: no old entry is deleted or modified, and no old MessageEntry is written back.
    */
   appendCompaction(summary: string, firstKeptEntryId: string, tokensBefore: number): CompactionEntry {
     return this.append({ type: "compaction", summary, firstKeptEntryId, tokensBefore } as CompactionEntry);
   }
 
-  /** 分支：把 leaf 移到历史 entry。只移指针，不改删任何 entry（Pi branch L1361-1366）。 */
+  /** Branch: move the leaf to a history entry. Only moves the pointer, never changes or deletes an entry (Pi branch L1361-1366). */
   branch(entryId: string): void {
     if (!this.byId.has(entryId)) {
       throw new Error(`Entry ${entryId} not found`);
@@ -162,12 +162,12 @@ export class TreeSession {
     this._leafId = entryId;
   }
 
-  /** 重置 leaf 为 null（下次 append 生成新根；Pi resetLeaf L1373）。 */
+  /** Reset the leaf to null (the next append creates a new root; Pi resetLeaf L1373). */
   resetLeaf(): void {
     this._leafId = null;
   }
 
-  /** 向根查询：从 fromId（默认 leaf）沿 parentId 走到根，返回 root→leaf 顺序（Pi getBranch L1261-1271）。 */
+  /** Walk toward the root: from fromId (default: leaf) follow parentId to the root, returned in root→leaf order (Pi getBranch L1261-1271). */
   getBranch(fromId?: string): Entry[] {
     const path: Entry[] = [];
     const startId = fromId ?? this._leafId;
@@ -181,9 +181,9 @@ export class TreeSession {
   }
 
   /**
-   * 07 章旧接口：分支路径上的 message entry 直接投影（不做 compaction 感知）。
-   * 08 章的 canonical reconstruction 是 buildSessionContext()；
-   * 本接口保留供 07 章语义对照（无 compaction 时两者等价，测试锁定）。
+   * Old Chapter 07 interface: projects the message entries on the branch path directly (not compaction-aware).
+   * Chapter 08's canonical reconstruction is buildSessionContext();
+   * this interface is kept for comparison with Chapter 07 semantics (the two are equivalent without compaction, locked by tests).
    */
   getMessages(): Message[] {
     return this.getBranch()
@@ -192,11 +192,11 @@ export class TreeSession {
   }
 
   /**
-   * 重建投影第一层（Pi buildContextEntries L418-454 的教学子集）：
-   * active path 上取【位置最靠后】的 compaction entry（多个只认 latest）；
-   * 结果 = [compaction] + path 中 firstKeptEntryId 起的 entries + compaction 之后的全部 entries。
-   * firstKeptEntryId 找不到：不抛错，降级为 [compaction] + 之后（Pi 同款宽容）。
-   * 无 compaction：返回完整 path（与 07 章行为等价）。
+   * Reconstruction projection, layer 1 (teaching subset of Pi buildContextEntries L418-454):
+   * take the [last-positioned] compaction entry on the active path (if there are several, only the latest counts);
+   * result = [compaction] + the path entries from firstKeptEntryId + all entries after the compaction.
+   * firstKeptEntryId not found: does not throw; falls back to [compaction] + what follows (same leniency as Pi).
+   * No compaction: returns the full path (equivalent to Chapter 07 behavior).
    */
   buildContextEntries(): Entry[] {
     const path = this.getBranch();
@@ -204,7 +204,7 @@ export class TreeSession {
     let compaction: CompactionEntry | null = null;
     for (const entry of path) {
       if (entry.type === "compaction") {
-        compaction = entry; // 覆盖赋值 → path 上最后一个 compaction 生效
+        compaction = entry; // overwriting assignment → the last compaction on the path wins
       }
     }
     if (!compaction) {
@@ -232,16 +232,16 @@ export class TreeSession {
   }
 
   /**
-   * 重建投影第二层（Pi buildSessionContext L461-470 的教学子集）：
-   * buildContextEntries → 逐 entry 投影 → canonical Message[]。
-   * 这是 08 章「active path → canonical messages」的唯一切片点：
-   * 压缩只改变这里的结果，不改变树里任何数据。
+   * Reconstruction projection, layer 2 (teaching subset of Pi buildSessionContext L461-470):
+   * buildContextEntries → per-entry projection → canonical Message[].
+   * This is the single slicing point of Chapter 08's "active path → canonical messages":
+   * Compaction only changes the result here, never any data in the tree.
    */
   buildSessionContext(): Message[] {
     return this.buildContextEntries().flatMap(sessionEntryToContextMessages);
   }
 
-  /** 树结构：孤儿（parent 缺失）当根，children 按 timestamp 排序（Pi getTree L1311-1349）。 */
+  /** Tree structure: orphans (missing parent) become roots, children sorted by timestamp (Pi getTree L1311-1349). */
   getTree(): TreeNode[] {
     const nodeMap = new Map<string, TreeNode>();
     const roots: TreeNode[] = [];
@@ -257,7 +257,7 @@ export class TreeSession {
         if (parent) {
           parent.children.push(node);
         } else {
-          roots.push(node); // 孤儿当根（Pi L1332-1335）
+          roots.push(node); // orphan becomes a root (Pi L1332-1335)
         }
       }
     }
@@ -270,7 +270,7 @@ export class TreeSession {
     return roots;
   }
 
-  /** 从已解析的 entry 列表重建（加载用）：leaf = 最后一条 entry（Pi _buildIndex L959-978）。 */
+  /** Rebuild from a parsed entry list (used on load): leaf = the last entry (Pi _buildIndex L959-978). */
   load(entries: Entry[]): void {
     this.entries = [...entries];
     this.byId.clear();
@@ -281,7 +281,7 @@ export class TreeSession {
     }
   }
 
-  /** 内部写入：分配 id/parentId/timestamp，追加并前移 leaf（Pi _appendEntry L1045-1050）。 */
+  /** Internal write: assign id/parentId/timestamp, append, and move the leaf forward (Pi _appendEntry L1045-1050). */
   private append<T extends Entry>(entry: T): T {
     const full: Entry = {
       ...entry,

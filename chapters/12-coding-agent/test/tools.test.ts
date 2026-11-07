@@ -1,8 +1,8 @@
 /**
- * 12 章测试：五个产品工具的独立用例（离线，临时目录 + 受控命令）。
+ * Chapter 12 tests: standalone cases for the five product tools (offline, temp directory + controlled commands).
  *
- * 错误语义：工具失败一律抛错，由 01 章流水线转错误 toolResult（本文件直接断言 rejects）。
- * 每个工具对应 Pi 蓝本，锚点标注在各文件头注释。
+ * Error semantics: a tool failure always throws, and the Chapter 01 pipeline turns it into an error toolResult (this file asserts rejects directly).
+ * Each tool maps to a Pi blueprint; the anchors are noted in each file's header comment.
  */
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,7 +14,7 @@ import { createGrepTool } from "../src/tools/grep.ts";
 import { createReadFileTool } from "../src/tools/read.ts";
 import { createWriteFileTool } from "../src/tools/write.ts";
 
-/** 每个用例独立的临时目录（项目根，即工具 cwd）。 */
+/** A separate temp directory per case (the project root, i.e. the tool cwd). */
 function tempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "lpia-ch12-tools-"));
   projectDirs.push(dir);
@@ -27,12 +27,12 @@ afterAll(() => {
 });
 
 describe("read_file（Pi harness/tools/read.ts）", () => {
-  it("读取文件内容，offset/limit 按行切片", async () => {
+  it("reads file content, offset/limit slice by line", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.txt"), "line1\nline2\nline3\n", "utf8");
     const tool = createReadFileTool(cwd);
 
-    // 尾随换行与 Pi 一致（split/join 保留文件原样；Pi read.ts L97-98 同语义）
+    // Trailing newline matches Pi (split/join keeps the file as-is; same semantics as Pi read.ts L97-98)
     const full = await tool.execute({ path: "a.txt" });
     expect(full.content).toBe("line1\nline2\nline3\n");
 
@@ -40,36 +40,36 @@ describe("read_file（Pi harness/tools/read.ts）", () => {
     expect(sliced.content).toContain("line2");
     expect(sliced.content).toContain("offset=3");
 
-    // limit 未到末尾时提示续读
+    // When limit doesn't reach the end, hint to continue
     const partial = await tool.execute({ path: "a.txt", limit: 2 });
     expect(partial.content).toContain("offset=3");
   });
 
-  it("读不存在的文件 → 错误", async () => {
+  it("reading a missing file → error", async () => {
     const tool = createReadFileTool(tempProject());
-    await expect(tool.execute({ path: "missing.ts" })).rejects.toThrow("无法读取文件");
+    await expect(tool.execute({ path: "missing.ts" })).rejects.toThrow("Cannot read file");
   });
 
-  it("offset 超出文件末尾 → 错误", async () => {
+  it("offset beyond end of file → error", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.txt"), "one line", "utf8");
     const tool = createReadFileTool(cwd);
-    await expect(tool.execute({ path: "a.txt", offset: 10 })).rejects.toThrow("超出文件末尾");
+    await expect(tool.execute({ path: "a.txt", offset: 10 })).rejects.toThrow("beyond end of file");
   });
 
-  it("超长文件截断并提示续读 offset", async () => {
+  it("truncates an overly long file and hints the offset to continue from", async () => {
     const cwd = tempProject();
     const manyLines = Array.from({ length: 600 }, (_, i) => `line ${i + 1}`).join("\n");
     writeFileSync(join(cwd, "big.txt"), manyLines + "\n", "utf8");
     const tool = createReadFileTool(cwd);
 
     const result = await tool.execute({ path: "big.txt" });
-    expect(result.content).toContain("用 offset=501 继续");
-    // 文件 600 行 + 尾换行 = 601 行（split 语义与 Pi 一致）
+    expect(result.content).toContain("Use offset=501 to continue");
+    // 600 lines + trailing newline = 601 lines (split semantics match Pi)
     expect(result.details).toMatchObject({ truncation: { truncated: true, totalLines: 601 } });
   });
 
-  it("路径解析 contract：cwd 是解析基点而非沙箱（../ 可解析到 cwd 外，与 Pi resolveToolPath 同款）", async () => {
+  it("path resolution contract: cwd is the resolution base, not a sandbox (../ can resolve outside cwd, same as Pi resolveToolPath)", async () => {
     const parent = tempProject();
     const cwd = join(parent, "project");
     mkdirSync(cwd, { recursive: true });
@@ -82,19 +82,19 @@ describe("read_file（Pi harness/tools/read.ts）", () => {
 });
 
 describe("write_file（Pi harness/tools/write.ts）", () => {
-  it("写文件 → 读回一致（自动创建父目录）", async () => {
+  it("write a file → reads back the same (creates parent directories automatically)", async () => {
     const cwd = tempProject();
     const tool = createWriteFileTool(cwd);
     const content = "export const answer = 42;\n";
 
     const result = await tool.execute({ path: "src/deep/answer.ts", content });
-    expect(result.content).toContain("成功写入");
+    expect(result.content).toContain("Successfully wrote");
 
     const { readFile } = await import("node:fs/promises");
     expect(await readFile(join(cwd, "src/deep/answer.ts"), "utf8")).toBe(content);
   });
 
-  it("覆盖已有文件", async () => {
+  it("overwrites an existing file", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.txt"), "old", "utf8");
     const tool = createWriteFileTool(cwd);
@@ -106,7 +106,7 @@ describe("write_file（Pi harness/tools/write.ts）", () => {
 });
 
 describe("edit（Pi harness/tools/edit.ts）", () => {
-  it("定位字符串替换 → 内容正确，details 带行级 diff", async () => {
+  it("targeted string replacement → correct content, details carry a line-level diff", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "calc.ts"), "export function add(a: number, b: number): number {\n  return a - b; // bug\n}\n", "utf8");
     const tool = createEditTool(cwd);
@@ -115,7 +115,7 @@ describe("edit（Pi harness/tools/edit.ts）", () => {
       path: "calc.ts",
       edits: [{ oldText: "a - b", newText: "a + b" }],
     });
-    expect(result.content).toContain("成功替换 1 处块");
+    expect(result.content).toContain("Successfully replaced 1 block(s)");
     const details = result.details as { firstChangedLine: number; diff: string } | undefined;
     expect(details).toMatchObject({ firstChangedLine: 2 });
     expect(details?.diff).toContain("- a - b");
@@ -125,7 +125,7 @@ describe("edit（Pi harness/tools/edit.ts）", () => {
     expect(await readFile(join(cwd, "calc.ts"), "utf8")).toContain("return a + b;");
   });
 
-  it("多个编辑互不重叠时一次应用（全部基于原文件匹配）", async () => {
+  it("applies multiple non-overlapping edits at once (all matched against the original file)", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "m.ts"), "a\nb\nc\nd\n", "utf8");
     const tool = createEditTool(cwd);
@@ -135,42 +135,42 @@ describe("edit（Pi harness/tools/edit.ts）", () => {
     expect(await readFile(join(cwd, "m.ts"), "utf8")).toBe("A\nb\nC\nd\n");
   });
 
-  it("oldText 不存在 → 错误", async () => {
+  it("oldText not present → error", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "m.ts"), "hello\n", "utf8");
     const tool = createEditTool(cwd);
-    await expect(tool.execute({ path: "m.ts", edits: [{ oldText: "nope", newText: "x" }] })).rejects.toThrow("oldText 未找到");
+    await expect(tool.execute({ path: "m.ts", edits: [{ oldText: "nope", newText: "x" }] })).rejects.toThrow("oldText not found");
   });
 
-  it("oldText 不唯一 → 错误", async () => {
+  it("oldText not unique → error", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "m.ts"), "dup\ndup\n", "utf8");
     const tool = createEditTool(cwd);
-    await expect(tool.execute({ path: "m.ts", edits: [{ oldText: "dup", newText: "x" }] })).rejects.toThrow("不唯一");
+    await expect(tool.execute({ path: "m.ts", edits: [{ oldText: "dup", newText: "x" }] })).rejects.toThrow("not unique");
   });
 
-  it("edits 重叠 → 错误（要求合并）", async () => {
+  it("overlapping edits → error (must be merged)", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "m.ts"), "abc\n", "utf8");
     const tool = createEditTool(cwd);
     await expect(
       tool.execute({ path: "m.ts", edits: [{ oldText: "ab", newText: "X" }, { oldText: "bc", newText: "Y" }] }),
-    ).rejects.toThrow("重叠");
+    ).rejects.toThrow("overlap");
   });
 
-  it("兼容层：单编辑对象参数归一为数组（03 章 prepareArguments）", async () => {
+  it("compatibility layer: a single edit object argument is normalized to an array (Chapter 03 prepareArguments)", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "m.ts"), "a\n", "utf8");
     const tool = createEditTool(cwd);
     const input = { path: "m.ts", oldText: "a", newText: "b" };
     await expect(tool.execute(tool.prepareArguments!(input) as never)).resolves.toMatchObject({
-      content: "成功替换 1 处块到 m.ts",
+      content: "Successfully replaced 1 block(s) in m.ts",
     });
   });
 });
 
-describe("grep（Pi coding-agent/src/core/tools/grep.ts，只存在于产品层）", () => {
-  it("匹配行号与内容（目录递归，跳过 node_modules）", async () => {
+describe("grep (Pi coding-agent/src/core/tools/grep.ts, exists only in the product layer)", () => {
+  it("matches line numbers and content (recursive directory, skips node_modules)", async () => {
     const cwd = tempProject();
     mkdirSync(join(cwd, "src"), { recursive: true });
     mkdirSync(join(cwd, "src", "node_modules"), { recursive: true });
@@ -182,12 +182,12 @@ describe("grep（Pi coding-agent/src/core/tools/grep.ts，只存在于产品层�
     expect(result.content).toContain("a.ts:2: export function add");
     expect(result.content).not.toContain("node_modules");
 
-    // 行号与内容随匹配行逐行给出（函数体行用另一个 pattern 命中）
+    // Line numbers and content are given per matching line (the function body line is hit with another pattern)
     const body = await tool.execute({ pattern: "return a \\+ b", path: "src" });
     expect(body.content).toContain("a.ts:3:   return a + b;");
   });
 
-  it("glob 过滤与 limit 上限提示", async () => {
+  it("glob filter and limit notice", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.ts"), "x\ny\n", "utf8");
     writeFileSync(join(cwd, "b.md"), "x\n", "utf8");
@@ -198,11 +198,11 @@ describe("grep（Pi coding-agent/src/core/tools/grep.ts，只存在于产品层�
     expect(globbed.content).not.toContain("b.md");
 
     const limited = await tool.execute({ pattern: "^x$", path: ".", limit: 1 });
-    expect(limited.content).toContain("匹配上限");
+    expect(limited.content).toContain("matches limit");
     expect(limited.details).toMatchObject({ matchLimitReached: 1 });
   });
 
-  it("literal 模式按字面量匹配", async () => {
+  it("literal mode matches literally", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.ts"), "a.b\n", "utf8");
     const tool = createGrepTool(cwd);
@@ -210,25 +210,25 @@ describe("grep（Pi coding-agent/src/core/tools/grep.ts，只存在于产品层�
     expect(result.content).toContain("a.ts:1: a.b");
   });
 
-  it("无匹配返回提示；路径不存在 → 错误", async () => {
+  it("no matches returns a notice; missing path → error", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.ts"), "hello\n", "utf8");
     const tool = createGrepTool(cwd);
 
     const none = await tool.execute({ pattern: "zzz" });
-    expect(none.content).toBe("未找到匹配");
+    expect(none.content).toBe("No matches found");
 
-    await expect(tool.execute({ pattern: "x", path: "missing" })).rejects.toThrow("路径不存在");
+    await expect(tool.execute({ pattern: "x", path: "missing" })).rejects.toThrow("Path not found");
   });
 
-  it("无效正则 → 错误", async () => {
+  it("invalid regex → error", async () => {
     const tool = createGrepTool(tempProject());
-    await expect(tool.execute({ pattern: "(" })).rejects.toThrow("无效的正则");
+    await expect(tool.execute({ pattern: "(" })).rejects.toThrow("Invalid regex");
   });
 });
 
 describe("bash（Pi harness/tools/bash.ts + coding-agent core/tools/bash.ts）", () => {
-  it("执行命令返回输出（stdout 与 stderr 合并）", async () => {
+  it("executes a command and returns output (stdout and stderr merged)", async () => {
     const cwd = tempProject();
     const tool = createBashTool(cwd);
 
@@ -240,40 +240,40 @@ describe("bash（Pi harness/tools/bash.ts + coding-agent core/tools/bash.ts）",
     expect(merged.content).toContain("err");
   });
 
-  it("非零退出码 → 错误结果", async () => {
+  it("non-zero exit code → error result", async () => {
     const tool = createBashTool(tempProject());
-    await expect(tool.execute({ command: "exit 3" })).rejects.toThrow("命令退出码 3");
+    await expect(tool.execute({ command: "exit 3" })).rejects.toThrow("Command exited with code 3");
   });
 
-  it("超时 → 错误结果（Pi L146-150）", async () => {
+  it("timeout → error result (Pi L146-150)", async () => {
     const tool = createBashTool(tempProject());
-    await expect(tool.execute({ command: "sleep 3", timeout: 1 })).rejects.toThrow("超时");
+    await expect(tool.execute({ command: "sleep 3", timeout: 1 })).rejects.toThrow("timed out");
   }, 10000);
 
-  it("AbortSignal 中止长命令 → 错误结果（Pi bash signal 透传）", async () => {
+  it("AbortSignal aborts a long command → error result (Pi bash signal pass-through)", async () => {
     const tool = createBashTool(tempProject());
     const controller = new AbortController();
     const run = tool.execute({ command: "sleep 30" }, undefined, controller.signal);
-    // 等 shell 真正启动后再 abort（sleep 30 提供数量级余量，不依赖精确 timing）；
-    // 运行中 abort → close 路径「命令被中止」；abort 落在 spawn 窗口 → error 路径同样拒绝
+    // Abort only after the shell has really started (sleep 30 gives an order of magnitude of margin, no reliance on exact timing);
+    // abort while running → close path "Command aborted"; abort in the spawn window → the error path rejects too
     await new Promise((resolve) => setTimeout(resolve, 100));
     controller.abort();
-    await expect(run).rejects.toThrow(/被中止|aborted/);
+    await expect(run).rejects.toThrow(/aborted/);
   }, 10000);
 
-  it("输出超 64KB 截断并保留末尾", async () => {
+  it("output over 64KB is truncated, keeping the tail", async () => {
     const tool = createBashTool(tempProject());
     const result = await tool.execute({ command: "node -e \"process.stdout.write('a'.repeat(100 * 1024))\"" });
-    expect(result.content).toContain("输出截断");
+    expect(result.content).toContain("output truncated");
     expect(result.content.length).toBeLessThan(70 * 1024);
     expect(result.details).toMatchObject({ truncation: { truncated: true } });
   });
 
-  it("工具本身不设防：危险命令白名单判定不在工具里（边界完整性 E）", async () => {
-    // 教学点：权限策略在扩展（permission-gate），不在工具或 loop。
-    // 工具对任意命令一视同仁（执行与策略分离），拦截由 beforeToolCall 钩子完成（见 e2e.test.ts）。
+  it("the tool itself has no guard: the dangerous command allowlist check is not in the tool (boundary integrity E)", async () => {
+    // Teaching point: the permission policy lives in an Extension (permission-gate), not in the tool or the loop.
+    // The tool treats every command the same (execution separate from policy); blocking is done by the beforeToolCall hook (see e2e.test.ts).
     const tool = createBashTool(tempProject());
-    const result = await tool.execute({ command: "echo 工具只负责执行" });
-    expect(result.content).toContain("工具只负责执行");
+    const result = await tool.execute({ command: "echo the tool only executes" });
+    expect(result.content).toContain("the tool only executes");
   });
 });

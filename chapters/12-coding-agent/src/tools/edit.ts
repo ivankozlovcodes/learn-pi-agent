@@ -1,53 +1,53 @@
 /**
- * 12 章产品工具：edit（定位字符串替换，Pi 蓝本 harness/tools/edit.ts 全文 140 行）。
+ * Chapter 12 product tool: edit (targeted string replacement; Pi blueprint harness/tools/edit.ts, 140 lines in full).
  *
- * 与 Pi 对齐的机制：
+ * Mechanisms aligned with Pi:
  * - parameters schema（Pi editSchema L28-37）：path + edits[]（oldText/newText）
- * - 兼容层 prepareArguments（Pi L55-77）：edits 为 JSON 字符串或单个编辑对象时归一为数组
- * - 语义（Pi 描述原文）：每个 oldText 必须在原文件唯一匹配、互不重叠；
- *   所有 edits 都基于原文件匹配（非增量），重叠/嵌套编辑要求合并
- * - 匹配失败/不唯一/重叠全部抛错（Pi L79-84 validate + applyEditsToNormalizedContent），转错误 toolResult
- * - 成功回执与 details（Pi L130-136：Successfully replaced N block(s) + diff/patch/firstChangedLine）
+ * - compatibility layer prepareArguments (Pi L55-77): edits given as a JSON string or a single edit object are normalized to an array
+ * - semantics (Pi description text): each oldText must match uniquely in the original file, with no overlaps;
+ *   all edits are matched against the original file (not incrementally); overlapping/nested edits must be merged
+ * - no match / not unique / overlap all throw (Pi L79-84 validate + applyEditsToNormalizedContent) and become an error toolResult
+ * - success receipt and details (Pi L130-136: Successfully replaced N block(s) + diff/patch/firstChangedLine)
  *
- * 教学剪裁：
- * - diff 队列全量剪裁：不做 fuzzy 匹配（normalizeForFuzzyMatch）、统一 patch 生成、
- *   BOM/行尾检测与还原（edit-diff.ts 全量），details 只给行级 diff 与首个变更行
- * - 文件并发写队列（Pi withFileMutationQueue）不教，同 write_file
- * - env 抽象（Pi ExecutionEnv.fileInfo/readTextFile）简化为直接 fs 调用
+ * Trimmed for teaching:
+ * - the diff pipeline is trimmed entirely: no fuzzy matching (normalizeForFuzzyMatch), unified patch generation,
+ *   or BOM/line-ending detection and restore (all of edit-diff.ts); details give only a line-level diff and the first changed line
+ * - the concurrent file write queue (Pi withFileMutationQueue) is not taught, same as write_file
+ * - the env abstraction (Pi ExecutionEnv.fileInfo/readTextFile) is simplified to direct fs calls
  */
 import { readFile, writeFile } from "node:fs/promises";
 import type { Tool, ToolParameters } from "../../../00-minimal-llm-call/src/index.ts";
 import { describeError, resolveToolPath } from "./path-utils.ts";
 
-/** 单次替换（Pi replaceEditSchema L17-26）。 */
+/** A single replacement (Pi replaceEditSchema L17-26). */
 export interface EditItem {
   oldText: string;
   newText: string;
 }
 
-/** edit 工具参数（Pi EditToolInput；type 别名以获得隐式索引签名，满足 00 基座 Tool 泛型约束）。 */
+/** edit tool arguments (Pi EditToolInput; a type alias to get an implicit index signature, satisfying the generic constraint of the 00 shared base Tool). */
 export type EditInput = {
   path: string;
   edits: EditItem[];
 };
 
-/** 定位结果：原文件中的一处匹配。 */
+/** Match result: one match in the original file. */
 interface Match extends EditItem {
   start: number;
 }
 
-/** 创建 edit 工具（Pi createEditTool，harness/tools/edit.ts）。 */
+/** Create the edit tool (Pi createEditTool, harness/tools/edit.ts). */
 export function createEditTool(cwd: string): Tool<EditInput> {
   return {
     name: "edit",
     description:
-      "在单个文件中做定位字符串替换：每个 edits[].oldText 必须在原文件唯一匹配且互不重叠；两处改动相邻时合并为一个编辑。",
+      "Make targeted string replacements in a single file: each edits[].oldText must match uniquely in the original file, with no overlaps; merge two adjacent changes into one edit.",
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "要编辑的文件路径（相对或绝对）" },
-        // 00 基座 ToolParameters 为极简 schema（type/description），数组元素细节经类型断言保留
-        edits: { type: "array", description: "一个或多个定位替换，每个含 oldText 与 newText" },
+        path: { type: "string", description: "Path of the file to edit (relative or absolute)" },
+        // The 00 shared base ToolParameters is a minimal schema (type/description); array element details are kept via a type assertion
+        edits: { type: "array", description: "One or more targeted replacements, each with oldText and newText" },
       },
       required: ["path", "edits"],
     } as ToolParameters,
@@ -61,10 +61,10 @@ export function createEditTool(cwd: string): Tool<EditInput> {
       try {
         content = await readFile(absolutePath, "utf-8");
       } catch (error) {
-        throw new Error(`无法编辑文件: ${path}（${describeError(error)}）`);
+        throw new Error(`Cannot edit file: ${path} (${describeError(error)})`);
       }
 
-      // 全部基于原文件匹配（Pi：Each edit is matched against the original file, not incrementally）
+      // All matched against the original file (Pi: Each edit is matched against the original file, not incrementally)
       const matches = edits.map((edit) => findUniqueMatch(content, edit));
       matches.sort((a, b) => a.start - b.start);
       assertNoOverlap(matches);
@@ -74,14 +74,14 @@ export function createEditTool(cwd: string): Tool<EditInput> {
 
       const details = buildDetails(content, matches);
       return {
-        content: `成功替换 ${matches.length} 处块到 ${path}`,
+        content: `Successfully replaced ${matches.length} block(s) in ${path}`,
         details,
       };
     },
   };
 }
 
-/** 兼容层：edits 为 JSON 字符串、单个编辑对象或顶层 oldText/newText 时归一为数组（Pi prepareEditArguments L55-77）。 */
+/** Compatibility layer: normalize edits to an array when given as a JSON string, a single edit object, or top-level oldText/newText (Pi prepareEditArguments L55-77). */
 export function prepareEditArguments(input: unknown): EditInput {
   if (!input || typeof input !== "object") {
     return input as EditInput;
@@ -93,13 +93,13 @@ export function prepareEditArguments(input: unknown): EditInput {
       const parsed: unknown = JSON.parse(edits);
       if (Array.isArray(parsed) || isSingleEdit(parsed)) edits = parsed;
     } catch {
-      // 解析失败保持原值，校验阶段报错
+      // On parse failure keep the original value; validation reports the error
     }
   }
   if (isSingleEdit(edits)) {
     edits = [edits];
   }
-  // 旧式顶层参数（Pi L71-76：legacy.oldText/newText 追加进 edits）
+  // Legacy top-level arguments (Pi L71-76: legacy.oldText/newText are appended to edits)
   const { oldText, newText, ...rest } = args;
   if (typeof oldText === "string" && typeof newText === "string") {
     const base = Array.isArray(edits) ? [...edits] : [];
@@ -108,25 +108,25 @@ export function prepareEditArguments(input: unknown): EditInput {
   return { ...rest, edits } as EditInput;
 }
 
-/** 单个编辑对象（未带 edits 数组的旧式参数）。 */
+/** A single edit object (legacy arguments without an edits array). */
 function isSingleEdit(value: unknown): value is EditItem {
   if (!value || typeof value !== "object") return false;
   const edit = value as Record<string, unknown>;
   return typeof edit.oldText === "string" && typeof edit.newText === "string";
 }
 
-/** 校验：path 与 edits 必须有效（Pi validateEditInput L79-84）。 */
+/** Validation: path and edits must be valid (Pi validateEditInput L79-84). */
 function validateEditInput(input: EditInput): EditInput {
   if (!Array.isArray(input.edits) || input.edits.length === 0) {
-    throw new Error("edit 工具参数无效：edits 必须包含至少一个替换。");
+    throw new Error("Invalid edit tool arguments: edits must contain at least one replacement.");
   }
   return input;
 }
 
-/** 在原文件查找唯一匹配（Pi：must be unique in the original file）。 */
+/** Find a unique match in the original file (Pi: must be unique in the original file). */
 function findUniqueMatch(content: string, edit: EditItem): Match {
   if (edit.oldText === "") {
-    throw new Error("oldText 不能为空字符串");
+    throw new Error("oldText must not be an empty string");
   }
   const positions: number[] = [];
   let index = content.indexOf(edit.oldText);
@@ -135,25 +135,25 @@ function findUniqueMatch(content: string, edit: EditItem): Match {
     index = content.indexOf(edit.oldText, index + 1);
   }
   if (positions.length === 0) {
-    throw new Error(`oldText 未找到: ${preview(edit.oldText)}`);
+    throw new Error(`oldText not found: ${preview(edit.oldText)}`);
   }
   if (positions.length > 1) {
-    throw new Error(`oldText 不唯一（找到 ${positions.length} 处）: ${preview(edit.oldText)}`);
+    throw new Error(`oldText is not unique (found ${positions.length} matches): ${preview(edit.oldText)}`);
   }
   return { ...edit, start: positions[0] };
 }
 
-/** 重叠检查：后一处匹配的开始不得落在前一处区间内（Pi：Do not include overlapping or nested edits）。 */
+/** Overlap check: a later match must not start inside the previous one's range (Pi: Do not include overlapping or nested edits). */
 function assertNoOverlap(matches: Match[]): void {
   for (let i = 1; i < matches.length; i++) {
     const prev = matches[i - 1];
     if (matches[i].start < prev.start + prev.oldText.length) {
-      throw new Error("edits 存在重叠或嵌套，请合并为同一个编辑");
+      throw new Error("edits overlap or are nested; merge them into one edit");
     }
   }
 }
 
-/** 应用全部匹配（按位置顺序拼接原文件分段与新文本）。 */
+/** Apply all matches (join original file segments and new text in position order). */
 function applyMatches(content: string, matches: Match[]): string {
   let result = "";
   let cursor = 0;
@@ -164,7 +164,7 @@ function applyMatches(content: string, matches: Match[]): string {
   return result + content.slice(cursor);
 }
 
-/** 行级 diff 与首个变更行（Pi generateDiffString/generateUnifiedPatch 的教学子集）。 */
+/** Line-level diff and first changed line (teaching subset of Pi generateDiffString/generateUnifiedPatch). */
 function buildDetails(content: string, matches: Match[]): { diff: string; firstChangedLine: number } {
   const diffLines: string[] = [];
   for (const match of matches) {
@@ -175,7 +175,7 @@ function buildDetails(content: string, matches: Match[]): { diff: string; firstC
   return { diff: diffLines.join("\n"), firstChangedLine };
 }
 
-/** 匹配片段预览（截断长文本）。 */
+/** Preview of a matched snippet (long text truncated). */
 function preview(text: string): string {
   return text.length > 40 ? `${text.slice(0, 40)}…` : text;
 }

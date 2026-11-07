@@ -1,11 +1,11 @@
 /**
- * 12 章测试：E2E 组装集成（离线 scripted LLM 全链路）。
+ * Chapter 12 tests: E2E assembly integration (offline scripted LLM, full chain).
  *
- * 场景：临时项目（fixture 复制品）修复 calculator.ts 的故意 bug，完整链路：
- *   Skill 按需加载（09 目录 + read 工具）→ grep/read 定位 → edit 修复 → bash npm test
- *   → 失败重试 → 最终回复 → 会话持久化（07 树）→ 恢复继续。
- * 危险 bash（rm -rf）由 11 章 permission-gate 扩展在真实产品链路中拦截（边界完整性 E：
- * 判断在扩展层，loop 与工具零改动，文件系统零接触）。
+ * Scenario: in a temp project (a copy of the fixture), fix the deliberate bug in calculator.ts; the full chain:
+ *   Skill on-demand loading (09 catalog + read tool) → grep/read locate → edit fix → bash npm test
+ *   → retry on failure → final reply → session persistence (07 tree) → restore and continue.
+ * Dangerous bash (rm -rf) is blocked by the Chapter 11 permission-gate Extension in the real product chain (boundary integrity E:
+ * the check is in the Extension layer, with zero changes to the loop and tools and zero file system contact).
  */
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +20,7 @@ import { copyFixtureToTemp } from "../src/fixture.ts";
 import { loadTree } from "../src/jsonl.ts";
 import permissionGate from "../../11-extension-composition/src/permission-gate.ts";
 
-/** 流式 mock LLM：按步骤回放（用尽后重复最后一步）。 */
+/** Streaming mock LLM: replays steps (repeats the last step once exhausted). */
 class ScriptedLlm implements LLMAdapter {
   private steps: AssistantMessageEvent[][];
   private next = 0;
@@ -56,42 +56,42 @@ function toolStream(calls: { id: string; name: string; args: Record<string, unkn
   ];
 }
 
-/** 清理本次测试创建的全部临时项目。 */
+/** Clean up all temp projects created by this test run. */
 const projectDirs: string[] = [];
 afterAll(() => {
   for (const dir of projectDirs) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链）", () => {
-  it("Skill 按需加载 → grep/read 定位 → edit 修复 → npm test 失败重试 → 最终回复 → 会话持久化", async () => {
+describe("E2E: full chain fixing calculator.ts (00-11 in one real execution chain)", () => {
+  it("Skill on-demand loading → grep/read locate → edit fix → npm test retry on failure → final reply → session persistence", async () => {
     const project = copyFixtureToTemp();
     projectDirs.push(project);
     const sessionFile = join(project, ".lpia-session.jsonl");
     const skillFile = join(project, "skills", "verify.md");
     const calcFile = join(project, "src", "calculator.ts");
-    // 危险命令的靶子：真实目录，验证拦截后零接触
+    // Target of the dangerous command: a real directory, to verify zero contact after blocking
     const victimDir = join(project, "keep");
     mkdirSync(victimDir);
-    writeFileSync(join(victimDir, "keep.txt"), "不能删除", "utf8");
+    writeFileSync(join(victimDir, "keep.txt"), "must not be deleted", "utf8");
 
-    const skill = loadSkillFromFile(skillFile, "verify", "验证修复：修复后运行 npm test 确认");
+    const skill = loadSkillFromFile(skillFile, "verify", "Validate a fix: run npm test after fixing to confirm");
     const script = new ScriptedLlm([
-      // 1. 危险命令：rm -rf 应被 permission-gate 拦截（beforeToolCall 钩子，文件零接触）
+      // 1. Dangerous command: rm -rf should be blocked by permission-gate (beforeToolCall hook, zero file contact)
       toolStream([{ id: "c1", name: "bash", args: { command: `rm -rf ${victimDir}` } }]),
-      // 2. Skill 按需加载（09 目录 + read 工具）
+      // 2. Skill on-demand loading (09 catalog + read tool)
       toolStream([{ id: "c2", name: "read_file", args: { path: skillFile } }]),
-      // 3. grep 定位（行号与内容）
+      // 3. grep locate (line number and content)
       toolStream([{ id: "c3", name: "grep", args: { pattern: "function add", path: "src" } }]),
-      // 4. read 读源码
+      // 4. read the source
       toolStream([{ id: "c4", name: "read_file", args: { path: "src/calculator.ts" } }]),
-      // 5. 修复前先跑测试：失败（证明 bug 存在）
+      // 5. Run the tests before fixing: they fail (proving the bug exists)
       toolStream([{ id: "c5", name: "bash", args: { command: "npm test", timeout: 120 } }]),
-      // 6. edit 修复（定位字符串替换）
+      // 6. edit fix (targeted string replacement)
       toolStream([{ id: "c6", name: "edit", args: { path: "src/calculator.ts", edits: [{ oldText: "a - b", newText: "a + b" }] } }]),
-      // 7. 重跑测试：通过
+      // 7. Rerun the tests: pass
       toolStream([{ id: "c7", name: "bash", args: { command: "npm test", timeout: 120 } }]),
-      // 8. 最终回复
-      textStream("已修复并验证通过"),
+      // 8. Final reply
+      textStream("Fixed and validated"),
     ]);
 
     const { agent, runner, saveSession } = await createCodingAgent({
@@ -101,7 +101,7 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
       skills: [skill],
       extensions: [permissionGate],
       sessionFile,
-      systemPromptPrefix: "你是一个编码助手。先读 verify 技能文件了解验证流程。",
+      systemPromptPrefix: "You are a coding assistant. First read the verify skill file to learn the validation workflow.",
     });
 
     const toolEvents: string[] = [];
@@ -109,40 +109,40 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
       if (event.type === "tool_execution_end") toolEvents.push(event.toolName);
     });
 
-    await agent.prompt("修复 src/calculator.ts 中的 bug，运行测试确认修复结果");
+    await agent.prompt("Fix the bug in src/calculator.ts and run the tests to confirm the fix");
 
-    // 1. 工具调用链完整（read → grep → edit → bash → 重试）
+    // 1. The tool call chain is complete (read → grep → edit → bash → retry)
     expect(toolEvents).toEqual(["bash", "read_file", "grep", "read_file", "bash", "edit", "bash"]);
 
-    // 2. Skill 按需加载（09）：目录在系统提示词、content 不在；read_file 把技能内容带回
+    // 2. Skill on-demand loading (09): the catalog is in the system prompt, content is not; read_file brings the skill content back
     expect(agent.state.systemPrompt).toContain("<available_skills>");
     expect(agent.state.systemPrompt).toContain(skillFile);
-    expect(agent.state.systemPrompt).not.toContain("修复流程");
-    const skillRead = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "read_file" && m.text?.includes("修复流程"));
+    expect(agent.state.systemPrompt).not.toContain("Fix workflow");
+    const skillRead = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "read_file" && m.text?.includes("Fix workflow"));
     expect(skillRead?.text).toContain("npm test");
 
-    // 3. 危险命令被 permission-gate 拦截（边界完整性 E：扩展层决策，零文件接触）
+    // 3. The dangerous command is blocked by permission-gate (boundary integrity E: decided in the Extension layer, zero file contact)
     const blocked = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.isError);
     expect(blocked?.text).toContain("blocked");
     expect(existsSync(join(victimDir, "keep.txt"))).toBe(true);
 
-    // 4. 修复前测试失败（错误结果）→ edit 修复 → 重跑通过
-    const failing = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.text?.includes("命令退出码"));
-    expect(failing?.text).toContain("期望 5");
-    expect(failing?.text).not.toContain("全部测试通过");
-    const passing = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.text?.includes("全部测试通过"));
+    // 4. Tests fail before the fix (error result) → edit fix → rerun passes
+    const failing = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.text?.includes("Command exited with code"));
+    expect(failing?.text).toContain("expected 5");
+    expect(failing?.text).not.toContain("All tests passed");
+    const passing = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.text?.includes("All tests passed"));
     expect(passing).toBeDefined();
     expect(await import("node:fs/promises").then((fs) => fs.readFile(calcFile, "utf8"))).toContain("return a + b;");
 
-    // 5. grep 定位输出（行号与内容）
+    // 5. grep locate output (line number and content)
     const grepResult = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "grep");
     expect(grepResult?.text).toContain("calculator.ts:5: export function add");
 
-    // 6. 最终回复
-    expect(agent.state.messages.at(-1)).toMatchObject({ role: "assistant", text: "已修复并验证通过" });
+    // 6. Final reply
+    expect(agent.state.messages.at(-1)).toMatchObject({ role: "assistant", text: "Fixed and validated" });
     expect(agent.state.isStreaming).toBe(false);
 
-    // 7. 会话持久化（07 树）：保存 → 恢复（leaf = 最后一条 entry）
+    // 7. Session persistence (07 tree): save → restore (leaf = the last entry)
     await saveSession();
     expect(existsSync(sessionFile)).toBe(true);
     const loaded = loadTree(sessionFile);
@@ -150,8 +150,8 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
     expect(loaded!.tree.getMessages()).toHaveLength(agent.state.messages.length);
     expect(loaded!.tree.getLeafId()).toBe(loaded!.tree.getEntries().at(-1)!.id);
 
-    // 8. 恢复继续（跨 run 记忆）
-    const script2 = new ScriptedLlm([textStream("继续确认")]);
+    // 8. Restore and continue (memory across runs)
+    const script2 = new ScriptedLlm([textStream("Continuing to confirm")]);
     const resumed = await createCodingAgent({
       cwd: project,
       model: "m",
@@ -159,28 +159,28 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
       skills: [skill],
       extensions: [permissionGate],
       sessionFile,
-      systemPromptPrefix: "你是一个编码助手。先读 verify 技能文件了解验证流程。",
+      systemPromptPrefix: "You are a coding assistant. First read the verify skill file to learn the validation workflow.",
     });
-    expect(resumed.agent.state.messages[0]).toMatchObject({ role: "user", text: "修复 src/calculator.ts 中的 bug，运行测试确认修复结果" });
-    await resumed.agent.prompt("继续");
+    expect(resumed.agent.state.messages[0]).toMatchObject({ role: "user", text: "Fix the bug in src/calculator.ts and run the tests to confirm the fix" });
+    await resumed.agent.prompt("Continue");
     expect(resumed.agent.state.messages).toHaveLength(agent.state.messages.length + 2);
 
-    // 9. 边界完整性（E）：拦截决策在扩展层，不在 loop 与工具
+    // 9. Boundary integrity (E): the blocking decision is in the Extension layer, not in the loop or tools
     expect(runner.hasHandlers("tool_call")).toBe(true);
     expect(isDangerousCommand(`rm -rf ${victimDir}`)).toBe(true);
   }, 60000);
 
-  it("危险 bash 拦截聚焦：文件零接触，拦截由扩展提供（边界完整性 E 的反向验证）", async () => {
+  it("dangerous bash blocking in focus: zero file contact, blocking is provided by the Extension (reverse check of boundary integrity E)", async () => {
     const project = copyFixtureToTemp();
     projectDirs.push(project);
     const victimDir = join(project, "keep");
     mkdirSync(victimDir);
-    writeFileSync(join(victimDir, "keep.txt"), "不能删除", "utf8");
+    writeFileSync(join(victimDir, "keep.txt"), "must not be deleted", "utf8");
 
-    const skill = loadSkillFromFile(join(project, "skills", "verify.md"), "verify", "验证修复：修复后运行 npm test 确认");
+    const skill = loadSkillFromFile(join(project, "skills", "verify.md"), "verify", "Validate a fix: run npm test after fixing to confirm");
     const script = new ScriptedLlm([
       toolStream([{ id: "c1", name: "bash", args: { command: `rm -rf ${victimDir}` } }]),
-      textStream("已拦截"),
+      textStream("Blocked"),
     ]);
     const { agent, runner } = await createCodingAgent({
       cwd: project,
@@ -190,7 +190,7 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
       extensions: [permissionGate],
     });
 
-    await agent.prompt("用 bash 删除 keep 目录");
+    await agent.prompt("Use bash to delete the keep directory");
 
     const blocked = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash");
     expect(blocked?.isError).toBe(true);

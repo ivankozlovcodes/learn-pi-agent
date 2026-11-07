@@ -1,7 +1,7 @@
 /**
- * 12 章 vitest 配置：只跑 test/ 目录，排除 fixture/。
- * fixture 是 E2E 的临时项目，其中的 tests/calculator.test.ts 是给产品 bash 工具
- * （npm test）执行的脚本式断言，不是 vitest 用例（且其含 bug 时本就应失败）。
+ * Chapter 12 vitest config: run only the test/ directory, exclude fixture/.
+ * fixture is the E2E temp project; its tests/calculator.test.ts is a script-style assertion run by the product bash tool
+ * (npm test), not a vitest case (and it is supposed to fail while the bug is present).
  */
 import { defineConfig } from "vitest/config";
 

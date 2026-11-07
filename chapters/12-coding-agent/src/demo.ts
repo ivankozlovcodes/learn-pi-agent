@@ -1,16 +1,16 @@
 /**
- * 12 章真实端点演示：把 00-11 组装成能跑的 Coding Agent，追踪一个真实编码请求穿过完整系统。
+ * Chapter 12 real-endpoint demo: assemble 00-11 into a Coding Agent that runs, and trace one real coding request through the whole system.
  *
- * 流程：
- *  1. 复制 fixture 临时项目（src/calculator.ts 含故意 bug + tests/ + skills/）
- *  2. 组装（07 Agent + 09 技能 + 10 扩展 runtime + 11 permission-gate + 产品工具集；08 压缩可选）
- *  3. 请求一：修复 calculator.ts 的 bug，运行测试确认修复结果
- *     （Skill 按需加载 → read/grep 定位 → edit 修复 → bash npm test → 失败重试 → 最终回复）
- *  4. 请求二：bash rm -rf 删除依赖目录 → 被 permission-gate 扩展拦截（真实产品链路）
- *  5. 会话持久化（07 树）：保存 → 从会话文件恢复 → 继续对话
+ * Flow:
+ *  1. copy the fixture temp project (src/calculator.ts with a deliberate bug + tests/ + skills/)
+ *  2. assemble (07 Agent + 09 Skills + 10 Extension Runtime + 11 permission-gate + product toolset; 08 Compaction optional)
+ *  3. request 1: fix the bug in calculator.ts and run the tests to confirm the fix
+ *     (Skill on-demand loading → read/grep locate → edit fix → bash npm test → retry on failure → final reply)
+ *  4. request 2: bash rm -rf deletes the dependency directory → blocked by the permission-gate Extension (real product chain)
+ *  5. session persistence (07 tree): save → restore from the session file → continue the conversation
  *
- * 前置条件：可用的 LLM API 凭据；模型经环境变量 CLAUDE_MODEL 指定。
- * 运行：npm run demo
+ * Prerequisites: working LLM API credentials; the model is set through the CLAUDE_MODEL environment variable.
+ * Run: npm run demo
  */
 import { join } from "node:path";
 import { AnthropicLlmAdapter } from "../../00-minimal-llm-call/src/index.ts";
@@ -19,89 +19,89 @@ import { createCodingAgent } from "./assembly.ts";
 import { loadSkillFromFile } from "./extensions.ts";
 import { copyFixtureToTemp } from "./fixture.ts";
 
-/** 组装层轨迹（12 章核心教学产物：每层对应 Pi 位置与章节）。 */
+/** Assembly layer trace (the core teaching output of Chapter 12: each layer maps to its Pi location and chapter). */
 function assemblyLayer(name: string, pi: string, chapter: string): void {
-  console.log(`[组装] ${name}`);
+  console.log(`[assembly] ${name}`);
   console.log(`        Pi: ${pi} / learn-pi-agent: ${chapter}`);
 }
 
 async function main(): Promise<void> {
   const model = process.env.CLAUDE_MODEL;
   if (!model) {
-    throw new Error("请设置 CLAUDE_MODEL 环境变量指定要使用的模型");
+    throw new Error("Set the CLAUDE_MODEL environment variable to the model to use");
   }
 
-  // 1. 临时项目（fixture 复制品，修改不污染仓库）
+  // 1. Temp project (a copy of the fixture, so changes don't pollute the repo)
   const projectDir = copyFixtureToTemp();
   const sessionFile = join(projectDir, ".lpia-session.jsonl");
-  console.log("=== learn-pi-agent Chapter 12：真编码工具集与组装（真实端点）===\n");
-  console.log(`临时项目: ${projectDir}`);
-  console.log(`fixture 内容: src/calculator.ts（含 bug）+ src/index.ts + tests/ + skills/\n`);
+  console.log("=== learn-pi-agent Chapter 12: real coding toolset and assembly (real endpoint) ===\n");
+  console.log(`Temp project: ${projectDir}`);
+  console.log(`fixture contents: src/calculator.ts (with bug) + src/index.ts + tests/ + skills/\n`);
 
-  // 2. 组装 00-11
-  assemblyLayer("00 基座（类型/适配器/EventStream）", "pi-ai + agent 包 types.ts", "00 Minimal LLM Call");
-  assemblyLayer("07 Agent 封装 + TreeSession 会话树", "agent-core agent.ts L173 + harness/session/", "07 Session Tree");
-  assemblyLayer("08 压缩（可选，本演示不启用）", "coding-agent core/compaction/compaction.ts（compactSession）", "08 Context Compaction");
-  assemblyLayer("09 技能目录（content 按需读取）", "agent-session.ts L963 buildSystemPrompt", "09 Skills");
-  assemblyLayer("10 扩展 runtime 接线", "sdk.ts L362-367 + _installAgentToolHooks L486-522", "10 Extension Runtime");
-  assemblyLayer("11 permission-gate 扩展", "examples/extensions/permission-gate.ts", "11 Extension Composition");
-  assemblyLayer("产品工具集（read_file/write_file/edit/grep/bash）", "harness/tools/ + coding-agent core/tools/", "12 本文件");
+  // 2. Assemble 00-11
+  assemblyLayer("00 base (types/adapter/EventStream)", "pi-ai + agent package types.ts", "00 Minimal LLM Call");
+  assemblyLayer("07 Agent wrapper + TreeSession Session Tree", "agent-core agent.ts L173 + harness/session/", "07 Session Tree");
+  assemblyLayer("08 Compaction (optional, not enabled in this demo)", "coding-agent core/compaction/compaction.ts (compactSession)", "08 Context Compaction");
+  assemblyLayer("09 Skill catalog (content read on demand)", "agent-session.ts L963 buildSystemPrompt", "09 Skills");
+  assemblyLayer("10 Extension Runtime wiring", "sdk.ts L362-367 + _installAgentToolHooks L486-522", "10 Extension Runtime");
+  assemblyLayer("11 permission-gate Extension", "examples/extensions/permission-gate.ts", "11 Extension Composition");
+  assemblyLayer("product toolset (read_file/write_file/edit/grep/bash)", "harness/tools/ + coding-agent core/tools/", "12 this file");
 
   const { agent, saveSession } = await createCodingAgent({
     cwd: projectDir,
     model,
     llm: new AnthropicLlmAdapter(),
-    skills: [loadSkillFromFile(join(projectDir, "skills", "verify.md"), "verify", "验证修复：修复后运行 npm test 确认")],
+    skills: [loadSkillFromFile(join(projectDir, "skills", "verify.md"), "verify", "Validate a fix: run npm test after fixing to confirm")],
     extensions: [permissionGate],
     sessionFile,
-    systemPromptPrefix: "你是一个编码助手。完成任务时先读取匹配的 verify 技能文件，按其中流程操作。",
+    systemPromptPrefix: "You are a coding assistant. When doing a task, first read the matching verify skill file and follow its workflow.",
   });
 
   agent.subscribe((event) => {
     if (event.type === "tool_execution_end") {
-      const mark = event.isError ? "（错误结果）" : "";
+      const mark = event.isError ? " (error result)" : "";
       const preview = event.result.content.replace(/\n/g, " ").slice(0, 140);
-      console.log(`  · 工具: ${event.toolName}${mark} → ${preview}`);
+      console.log(`  · tool: ${event.toolName}${mark} → ${preview}`);
     }
   });
 
-  // 3. 请求一：真实编码任务（Skill 按需加载 → 定位 → 修复 → 验证 → 最终回复）
-  console.log("\n[请求一] 修复 src/calculator.ts 中的 bug，运行测试确认修复结果");
-  await agent.prompt("修复 src/calculator.ts 中的 bug。先读 verify 技能文件了解验证流程，再定位问题、修复并运行测试确认。");
+  // 3. Request 1: a real coding task (Skill on-demand loading → locate → fix → validate → final reply)
+  console.log("\n[request 1] Fix the bug in src/calculator.ts and run the tests to confirm the fix");
+  await agent.prompt("Fix the bug in src/calculator.ts. First read the verify skill file to learn the validation workflow, then locate the problem, fix it and run the tests to confirm.");
   const finalReply = agent.state.messages.at(-1);
-  console.log(`\n=== 最终回复: ${finalReply?.text ?? "(无)"}`);
+  console.log(`\n=== Final reply: ${finalReply?.text ?? "(none)"}`);
 
-  // 4. 请求二：危险命令拦截（permission-gate 在真实产品链路中拦截 rm -rf）
-  console.log("\n[请求二] 尝试用 bash 执行 rm -rf node_modules（应由 permission-gate 拦截）");
-  await agent.prompt("用 bash 执行 rm -rf node_modules 清理依赖目录。");
+  // 4. Request 2: dangerous command blocking (permission-gate blocks rm -rf in the real product chain)
+  console.log("\n[request 2] Try to run rm -rf node_modules with bash (should be blocked by permission-gate)");
+  await agent.prompt("Use bash to run rm -rf node_modules to clean the dependency directory.");
   const blocked = agent.state.messages.at(-1);
-  console.log(`拦截结果: ${blocked?.text ?? "(无)"}`);
+  console.log(`Block result: ${blocked?.text ?? "(none)"}`);
 
-  // 5. 会话持久化（07 树）→ 恢复 → 继续
+  // 5. Session persistence (07 tree) → restore → continue
   await saveSession();
-  console.log(`\n会话已保存: ${sessionFile}`);
+  console.log(`\nSession saved: ${sessionFile}`);
   const resumed = await createCodingAgent({
     cwd: projectDir,
     model,
     llm: new AnthropicLlmAdapter(),
-    skills: [loadSkillFromFile(join(projectDir, "skills", "verify.md"), "verify", "验证修复：修复后运行 npm test 确认")],
+    skills: [loadSkillFromFile(join(projectDir, "skills", "verify.md"), "verify", "Validate a fix: run npm test after fixing to confirm")],
     extensions: [permissionGate],
     sessionFile,
-    systemPromptPrefix: "你是一个编码助手。完成任务时先读取匹配的 verify 技能文件，按其中流程操作。",
+    systemPromptPrefix: "You are a coding assistant. When doing a task, first read the matching verify skill file and follow its workflow.",
   });
-  console.log(`恢复后消息数: ${resumed.agent.state.messages.length}（leaf = 最后一条 entry）`);
-  await resumed.agent.prompt("基于当前会话，再运行一次 npm test 确认项目仍然通过。");
-  console.log(`继续对话后消息数: ${resumed.agent.state.messages.length}`);
-  console.log(`继续后最终回复: ${resumed.agent.state.messages.at(-1)?.text ?? "(无)"}`);
+  console.log(`Messages after restore: ${resumed.agent.state.messages.length} (leaf = the last entry)`);
+  await resumed.agent.prompt("Based on the current session, run npm test once more to confirm the project still passes.");
+  console.log(`Messages after continuing: ${resumed.agent.state.messages.length}`);
+  console.log(`Final reply after continuing: ${resumed.agent.state.messages.at(-1)?.text ?? "(none)"}`);
 
-  console.log("\n=== 收束 ===");
-  console.log("00-11 的机制第一次全部处于同一条真实执行链中：工具是真实的（fs/child_process），");
-  console.log("权限策略在扩展里（10/11 章机制），循环与 Agent 无需感知产品策略。");
+  console.log("\n=== Wrap-up ===");
+  console.log("For the first time, all the mechanisms of 00-11 sit in one real execution chain: the tools are real (fs/child_process),");
+  console.log("the permission policy lives in Extensions (the Chapter 10/11 mechanisms), and the loop and Agent need no knowledge of product policy.");
   console.log(`\nDemo workspace kept at: ${projectDir}`);
-  console.log("（临时项目保留：可直接查看修复后的 src/calculator.ts 与会话文件 .lpia-session.jsonl）");
+  console.log("(The temp project is kept: you can inspect the fixed src/calculator.ts and the session file .lpia-session.jsonl directly)");
 }
 
 main().catch((error: unknown) => {
-  console.error("\n演示失败:", error instanceof Error ? error.message : String(error));
+  console.error("\nDemo failed:", error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

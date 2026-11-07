@@ -1,19 +1,19 @@
 /**
- * 12 章 E2E 临时项目工具：把 fixture/ 复制到系统临时目录。
+ * Chapter 12 E2E temp project helper: copy fixture/ to the system temp directory.
  *
- * 为什么复制：E2E 场景（demo 与测试）会真实修改项目文件（edit 修复 bug、npm test 验证）。
- * 直接改仓库内 fixture 会污染工作区，复制到临时目录保证每次运行从干净状态开始。
+ * Why copy: the E2E scenarios (demo and tests) really modify project files (edit fixes the bug, npm test validates).
+ * Editing the in-repo fixture directly would pollute the working tree; copying to a temp directory makes every run start from a clean state.
  */
 import { cpSync, mkdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** fixture 目录（仓库内模板，只读）。 */
+/** fixture directory (in-repo template, read-only). */
 export const FIXTURE_DIR = fileURLToPath(new URL("../fixture/", import.meta.url));
 const WORKSPACE_NODE_MODULES = fileURLToPath(new URL("../../../node_modules/", import.meta.url));
 
-/** 复制 fixture 到临时目录，返回临时项目根路径。 */
+/** Copy the fixture to a temp directory and return the temp project root path. */
 export function copyFixtureToTemp(): string {
   const dest = join(tmpdir(), `lpia-ch12-fixture-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   cpSync(FIXTURE_DIR, dest, { recursive: true });
