@@ -123,7 +123,7 @@ describe("E2E：修复 calculator.ts 全链路（00-11 同一条真实执行链�
 
     // 3. 危险命令被 permission-gate 拦截（边界完整性 E：扩展层决策，零文件接触）
     const blocked = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "bash" && m.isError);
-    expect(blocked?.text).toContain("拦截");
+    expect(blocked?.text).toContain("blocked");
     expect(existsSync(join(victimDir, "keep.txt"))).toBe(true);
 
     // 4. 修复前测试失败（错误结果）→ edit 修复 → 重跑通过

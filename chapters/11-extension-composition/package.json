@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 11 章：Extension Composition（用扩展组合工作流，Part III Extensibility）",
+  "description": "learn-pi-agent Chapter 11: Extension Composition (composing workflows from extensions, Part III Extensibility)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",

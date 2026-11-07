@@ -1,26 +1,26 @@
 /**
- * 教学最小 bash 工具（11 章案例的拦截对象；完整产品工具集在 12 章）。
+ * Minimal teaching bash tool (the target that Chapter 11's cases block; the full product tool set is in Chapter 12).
  *
- * 设计要点：bash 工具本身**不设防**（执行任意命令）。这正是教学点：
- * 权限策略不在工具里，在扩展里（permission-gate / plan-mode 在 execute 前拦截）。
- * 危险命令（rm -rf 等）在教学中从不真执行：demo/测试只发安全命令，危险命令一律被拦截。
+ * Design point: the bash tool itself is **unguarded** (it executes any command). That is exactly the teaching point:
+ * permission policy lives not in the tool but in extensions (permission-gate / plan-mode block before execute).
+ * Dangerous commands (rm -rf etc.) never really execute in teaching: the demo/tests only send safe commands, and dangerous commands are always blocked.
  */
 import { execFileSync } from "node:child_process";
 import type { Tool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 创建 bash 工具（Pi harness/tools/bash.ts 的教学最小版，12 章做完整版）。 */
+/** Create the bash tool (a minimal teaching version of Pi harness/tools/bash.ts; Chapter 12 builds the full version). */
 export function createBashTool(): Tool<{ command: string }> {
   return {
     name: "bash",
-    description: "执行 shell 命令",
+    description: "Execute a shell command",
     parameters: {
       type: "object",
-      properties: { command: { type: "string", description: "要执行的命令" } },
+      properties: { command: { type: "string", description: "The command to execute" } },
       required: ["command"],
     },
     async execute(args) {
       const stdout = execFileSync("/bin/sh", ["-c", args.command], { encoding: "utf-8", timeout: 5000 });
-      return { content: stdout.trim() || "(无输出)" };
+      return { content: stdout.trim() || "(no output)" };
     },
   };
 }
