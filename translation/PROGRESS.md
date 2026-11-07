@@ -43,7 +43,9 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | root | README.en.md alignment + upstream credit (parent, Phase 4) | pending | |
 
 ## Open review findings
-none
+- Review wave 1 (Opus reviewers, read-only): `translation/reviews/ch00-03.md` (12 low), `ch04-07.md` (14 low, 10 med: glossary drift on truncation guard / sequential, full-width punctuation), `ch08-11-site.md` (23 low, 2 med). No high.
+- Full-width punctuation leftovers: fixed by the parent (f86a549); residue check now also flags CJK punctuation.
+- Remaining findings: fix workers per group (running).
 
 ## Next action
 12 running (last chapter). Then consistency check + Phase 3 verification. (A 429 at ~02:30 interrupted 08/11; they were resumed in place at 03:00 and merged.)
