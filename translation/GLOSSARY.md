@@ -65,6 +65,20 @@ Keep the source's casing. The source mixes `Tool Result` (concept) with `toolRes
 | 待办 | todo | |
 | 损坏行 | corrupted line | |
 | 无输出 / 无回复 | (no output) / (no reply) | |
+| 适配器 | adapter | `LLMAdapter` |
+| 契约 | contract | |
+| 快照 | snapshot | |
+| 共享基座 | shared base | chapter 00 as the shared library |
+| 回传 | send back | |
+| 教学裁剪 / 教学剪裁 | trimmed for teaching | |
+| 锚点（Pi 锚点） | Pi anchor | source reference to Pi |
+| 批终止 | batch termination | |
+| 生产-消费解耦 | producer-consumer decoupling | |
+| 加数 | addend | |
+| 参数校验失败 | Argument validation failed | |
+| 缺少必填参数 | Missing required argument | 00/src/validate.ts |
+| 操作已中止 | Operation aborted | 00/src/llm.ts |
+| 本章目录 / 上一章 / 下一章 | On this page / Previous chapter / Next chapter | site UI |
 
 ## Punctuation and typography
 - Full-width punctuation becomes ASCII: `：` → `: `, `，` → `, `, `（）` → ` ()`, `。` → `.`, `、` → `, `. Chinese quotes `「」“”` → `"…"`.
