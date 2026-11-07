@@ -7,7 +7,7 @@
  *    others are blocked) → /plan off restores it
  * 3. subagent: delegate to an independent agent (the extension version of the official "No sub-agents")
  * Wrap-up: three workflows done with extension composition; the core loop stays unchanged.
- * Prerequisites: usable LLM API credentials; the model is set via the CLAUDE_MODEL environment variable.
+ * Prerequisites: working LLM API credentials; the model is set via the CLAUDE_MODEL environment variable.
  * Run: npm run demo
  */
 import { AnthropicLlmAdapter, createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   // 6. Conclusion: policy comes from extension composition; the core loop stays unchanged.
   console.log("\n=== Extension composition done: the core loop stays unchanged ===");
   console.log("All three workflows come from the Chapter 10 Extension Runtime (on/registerTool/registerCommand/ctx.setActiveTools).");
-  console.log("Zero changes to the loop, the Agent and the session tree. Every item on the official No list can be built after the Harness stops.");
+  console.log("Zero changes to the loop, the Agent and the session tree. Every item on the official No list can be built on top of where the Harness stops.");
 }
 
 main().catch((error: unknown) => {

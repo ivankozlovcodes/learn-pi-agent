@@ -345,7 +345,7 @@ LLM
 
 The Core already has the Context seam.
 
-The Extension just keeps registering behavior at this spot.
+The Extension just registers more behavior at this spot.
 
 ## Different Handlers merge in different ways
 
@@ -556,4 +556,4 @@ Session entries
 
 The more interesting question is how far these ready-made primitives can already be composed.
 
-Chapter 11 continues from here.
+Chapter 11 picks up from here.

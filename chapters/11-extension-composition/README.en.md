@@ -66,7 +66,7 @@ forbid outright
 
 ask for confirmation
 
-allow only an allowlist
+allow only allowlisted commands
 
 already in an isolated environment, execute directly
 ```
@@ -461,7 +461,7 @@ subagent(task A)
 subagent(task B)
 ```
 
-Chapter 04's batch execution can take them as they are.
+Chapter 04's batch execution can handle them directly.
 
 The two Children each maintain their own Agent state and Session, and run at the same time.
 
@@ -547,7 +547,7 @@ planMode
 subagent
 ```
 
-This is also where the Extension Runtime only really shows its value, in this chapter.
+This is also why the Extension Runtime only really shows its value in this chapter.
 
 On their own, the APIs in Chapter 10 are just registration interfaces.
 

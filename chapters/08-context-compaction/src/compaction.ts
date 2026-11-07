@@ -2,13 +2,13 @@
  * Chapter 08 core (compaction layer): Session Compaction: cut point, summary and minimal orchestration.
  *
  * Rebuilt mechanisms (all anchored in the coding-agent product stack, not the low-level harness):
- * - `estimateTokens` (compaction.ts L266): token estimate (teaching uses a rough chars / 4; Pi prefers anchoring on usage)
- * - `shouldCompact` (L235): the estimate exceeds a threshold (teaching simplifies the trigger)
+ * - `estimateTokens` (compaction.ts L266): token estimate (the teaching version uses a rough chars / 4; Pi prefers anchoring on usage)
+ * - `shouldCompact` (L235): the estimate exceeds a threshold (the teaching version simplifies the trigger)
  * - `findCutPoint` (L403-461): accumulate tokens from the end to pick a cut point; valid cut point = user/assistant
  *   (the three-role subset of the teaching Message, equivalent to a subset of Pi isCutPointMessage L308-321:
- *   Pi also allows bashExecution/custom/branchSummary/compactionSummary, which teaching does not have),
+ *   Pi also allows bashExecution/custom/branchSummary/compactionSummary, which the teaching version does not have),
  *   toolResult is never a cut point. When cutting at assistant(toolCall), the toolResults after it are in the retained tail.
- *   Separate summarization of the turn prefix for a Split Turn (Pi TURN_PREFIX_SUMMARIZATION_PROMPT L835-848) is not rebuilt in teaching.
+ *   Separate summarization of the turn prefix for a Split Turn (Pi TURN_PREFIX_SUMMARIZATION_PROMPT L835-848) is not rebuilt in the teaching version.
  * - `summarize`: the LLM generates the summary (fail-safe subset of Pi compact L858-964: error/aborted/stream exception → null)
  * - `compactSession`: minimal orchestration (teaching version of the harness seam of Pi AgentSession.compact, see the function comment)
  *
@@ -34,7 +34,7 @@ export interface CompactionSettings {
   keepRecentTokens: number;
 }
 
-/** Token estimate (chars/4 version of Pi estimateTokens L266; Pi prefers anchoring on usage, teaching has no usage). */
+/** Token estimate (chars/4 version of Pi estimateTokens L266; Pi prefers anchoring on usage, the teaching version has no usage). */
 export function estimateTokens(message: Message): number {
   let chars = 0;
   if (message.text) chars += message.text.length;
@@ -56,7 +56,7 @@ export function shouldCompact(messages: Message[], limitTokens: number): boolean
 /**
  * Find a valid cut point from the end (teaching subset of Pi findCutPoint L403-461):
  * valid cut point = user or assistant (toolResult is excluded from the three teaching roles; Pi's valid set is a superset,
- * but teaching has no bashExecution/custom/summary message roles, so the subset is complete).
+ * but the teaching version has no bashExecution/custom/summary message roles, so the subset is complete).
  * Once the accumulated total reaches keepRecentTokens, take "the first valid cut point at or after that position".
  * - When cutting at assistant(toolCall), all toolResults after it are in the retained tail (the pairing is not split)
  * - Threshold region is all toolResult (no valid cut point) → return 0, no Compaction (same effect as Pi falling back to startIndex without a valid cut point)

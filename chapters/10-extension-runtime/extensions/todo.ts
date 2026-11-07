@@ -68,7 +68,7 @@ export default function (pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "todo",
-    description: "Manage the todo list. Actions: list (list), add (add, text argument), toggle (toggle, id argument), clear (clear)",
+    description: "Manage the todo list. Actions: list, add (text argument), toggle (id argument), clear",
     parameters: {
       type: "object",
       properties: {
@@ -98,7 +98,7 @@ export default function (pi: ExtensionAPI): void {
             return { content: `Error: todo #${id} does not exist`, details: { action, todos, nextId, error: "not found" } as TodoDetails };
           }
           item.done = !item.done;
-          return { content: `Todo #${item.id} ${item.done ? "done" : "undone"}`, details: { action, todos: [...todos], nextId } as TodoDetails };
+          return { content: `Todo #${item.id} ${item.done ? "marked done" : "marked not done"}`, details: { action, todos: [...todos], nextId } as TodoDetails };
         }
         case "clear": {
           todos = [];

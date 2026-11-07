@@ -307,7 +307,7 @@ PROGRESS
 U2
 ```
 
-and filter it out when actually going into the Provider:
+and filter it out when the messages actually go to the Provider:
 
 ```text
 U1
@@ -364,7 +364,7 @@ Only in the next turn can the model actually see the new Tool.
 
 Neither mechanism requires redesigning the Agent Loop.
 
-The existing Message boundary and Tool boundary can already catch them.
+The existing Message boundary and Tool boundary can already handle them.
 
 ## Pi's Skills end up leaving only a very short runtime path
 
@@ -439,4 +439,4 @@ But a Skill is still just a file, and Custom Message and `addedToolNames` are al
 
 If we want to load a piece of real code that registers Tools, listens for events and intercepts calls, these data entry points alone aren't enough.
 
-Chapter 10 continues from this problem.
+Chapter 10 picks up from this problem.

@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   if (!compactionEntry) {
     throw new Error("CompactionEntry missing");
   }
-  // Persist to disk: the CompactionEntry is appended to the session file like any other entry (Pi AgentSession persists automatically; in teaching the demo calls it explicitly)
+  // Persist to disk: the CompactionEntry is appended to the session file like any other entry (Pi AgentSession persists automatically; the teaching demo calls it explicitly)
   appendEntries(SESSION_FILE, HEADER, [compactionEntry]);
 
   console.log("\n=== Reconstructed Context: buildSessionContext ===");
