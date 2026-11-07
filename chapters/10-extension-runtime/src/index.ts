@@ -1,22 +1,22 @@
 /**
- * 10 章接线：把 ExtensionRunner 接入 Core 的 moments（Pi 桥接的教学版）。
+ * Chapter 10 wiring: plug the ExtensionRunner into the Core's moments (a teaching version of Pi's bridge).
  *
- * Pi 的桥接分两处：sdk.ts 把 transformContext → emitContext（L362-367）；
- * agent-session.ts `_installAgentToolHooks`（L486-522）把 beforeToolCall → emitToolCall（L487-494）、
- * afterToolCall → emitToolResult（L508-511）接上；AgentSession 把 agent 事件转发给 runner（Observe）。
- * 教学版只接三个钩子：
+ * Pi's bridge lives in two places: sdk.ts wires transformContext → emitContext (L362-367);
+ * agent-session.ts `_installAgentToolHooks` (L486-522) wires beforeToolCall → emitToolCall (L487-494)
+ * and afterToolCall → emitToolResult (L508-511); AgentSession forwards agent events to the runner (Observe).
+ * The teaching version wires only three hooks:
  *
- * - beforeToolCall → emitToolCall（Intercept：block 即拦截，批终止语义由 03 章处理）
- * - transformContext → emitContext（Inject：扩展可改写发给模型的上下文）
- * - loadTools → 从 runner 的注册表动态加载（addedToolNames 协议字段由 wrapper 声明；
- *   07 章 loop 基线不消费该字段）
+ * - beforeToolCall → emitToolCall (Intercept: block means blocked; batch termination semantics are handled by Chapter 03)
+ * - transformContext → emitContext (Inject: extensions can rewrite the context sent to the model)
+ * - loadTools → load dynamically from the runner's registry (the addedToolNames protocol field is declared by the wrapper;
+ *   the Chapter 07 loop baseline doesn't consume that field)
  *
- * Observe（事件转发）在 demo/测试中经 agent.subscribe 手动接（Pi 也是组装层做的）。
+ * Observe (event forwarding) is wired by hand via agent.subscribe in the demo/tests (in Pi, the assembly layer does it too).
  */
 import type { AgentLoopConfig } from "../../00-minimal-llm-call/src/index.ts";
 import type { ExtensionRunner } from "./runner.ts";
 
-/** 扩展感知的循环配置（返回的钩子可直接放进 AgentLoopConfig）。 */
+/** Extension-aware loop config (the returned hooks can go straight into AgentLoopConfig). */
 export function createExtensionAwareConfig(runner: ExtensionRunner): {
   beforeToolCall: NonNullable<AgentLoopConfig["beforeToolCall"]>;
   transformContext: NonNullable<AgentLoopConfig["transformContext"]>;
@@ -36,7 +36,7 @@ export function createExtensionAwareConfig(runner: ExtensionRunner): {
   };
 }
 
-/** 事件转发：Agent 事件 → runner（Observe 能力；Pi AgentSession._handleAgentEvent 的教学版）。 */
+/** Event forwarding: Agent events → runner (Observe capability; a teaching version of Pi AgentSession._handleAgentEvent). */
 export function forwardAgentEvents(runner: ExtensionRunner): (event: { type: string; [key: string]: unknown }) => void {
   return (event) => {
     switch (event.type) {

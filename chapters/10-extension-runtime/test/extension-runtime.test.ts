@@ -1,6 +1,6 @@
 /**
- * 10 章测试：Extension Runtime 六类能力（Observe / Intercept / Extend / Reconfigure /
- * Inject / Persist）+ loader + wrapper 联动 + 组合全链路。流式 mock LLM 驱动（离线）。
+ * Chapter 10 tests: the six Extension Runtime capabilities (Observe / Intercept / Extend / Reconfigure /
+ * Inject / Persist) + loader + wrapper linkage + the combined end-to-end chain. Driven by a streaming mock LLM (offline).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -17,10 +17,10 @@ import { createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
 import { Agent } from "../../07-session-tree/src/agent.ts";
 import { TreeSession } from "../../07-session-tree/src/session-tree.ts";
 
-/** 10 章教学扩展目录（loader 的加载对象）。 */
+/** The Chapter 10 teaching extensions directory (what the loader loads). */
 const EXTENSIONS_DIR = fileURLToPath(new URL("../extensions", import.meta.url));
 
-/** 流式 mock LLM：步骤用尽后重复最后一步。 */
+/** Streaming mock LLM: repeats the last step once the steps run out. */
 class ScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -36,11 +36,11 @@ class ScriptedLlm implements LLMAdapter {
   }
 }
 
-/** 记录每次 complete 请求的 provider 可见工具名（setActiveTools 全链路验证用）。 */
+/** Records the provider-visible tool names of every complete request (for end-to-end setActiveTools validation). */
 class RecordingScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
-  /** 每轮请求携带的 provider 可见工具名。 */
+  /** Provider-visible tool names carried by each turn's request. */
   calls: string[][] = [];
 
   constructor(steps: (AssistantMessageEvent[])[]) {
@@ -79,7 +79,7 @@ function assistantMessage(): AssistantMessage {
   return { role: "assistant", stopReason: "tool_use", toolCalls: [] };
 }
 
-/** 建 runner 并加载工厂。 */
+/** Build a runner and load factories. */
 async function makeRunner(
   factories: ExtensionFactory[],
   config: RuntimeConfig = { model: "m", activeTools: [] },
@@ -89,12 +89,12 @@ async function makeRunner(
   return runner;
 }
 
-/** 一个最小 hello 工具工厂。 */
+/** A minimal hello tool factory. */
 function helloFactory(): ExtensionFactory {
   return (pi) => {
     pi.registerTool({
       name: "hello",
-      description: "问候",
+      description: "greet",
       parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
       async execute(args) {
         return { content: `Hello, ${String(args.name)}!` };
@@ -103,85 +103,85 @@ function helloFactory(): ExtensionFactory {
   };
 }
 
-/** 临时目录（afterEach 清理）。 */
+/** Temp directories (cleaned up in afterEach). */
 let tempRoot: string | undefined;
 function tempDir(): string {
   tempRoot ??= mkdtempSync(join(tmpdir(), "lpia-10-"));
   return tempRoot;
 }
 
-describe("extensions 运行时（10 章）", () => {
-  it("Extend：registerTool 进注册表，可包装进 context.tools（Pi registerTool：ToolDefinition 类型 L449、方法签名 L1286）", async () => {
+describe("extensions runtime (Chapter 10)", () => {
+  it("Extend: registerTool goes into the registry and can be wrapped into context.tools (Pi registerTool: ToolDefinition type L449, method signature L1286)", async () => {
     const runner = await makeRunner([helloFactory()]);
     expect(runner.getRegisteredTools().map((t) => t.name)).toEqual(["hello"]);
-    // 包装后是 00 基座 Tool 形状（可放进 AgentLoopConfig 的 context.tools）
+    // After wrapping it has the 00 shared base Tool shape (can go into AgentLoopConfig's context.tools)
     const wrapped: Tool = runner.getRegisteredTools()[0];
     expect(wrapped.name).toBe("hello");
     const result = await wrapped.execute({ name: "Alice" });
     expect(result.content).toBe("Hello, Alice!");
   });
 
-  it("Intercept：on(tool_call) 拦截危险工具，block + reason 回传（Pi emitToolCall L932）", async () => {
+  it("Intercept: on(tool_call) blocks a dangerous tool and sends back block + reason (Pi emitToolCall L932)", async () => {
     const runner = await makeRunner([
       (pi) => {
         pi.on("tool_call", async (event) => {
-          if (event.toolCall.name === "delete_file") return { block: true, reason: "禁止删除" };
+          if (event.toolCall.name === "delete_file") return { block: true, reason: "deletion not allowed" };
           return undefined;
         });
         pi.registerTool({
           name: "delete_file",
-          description: "删除",
+          description: "delete",
           parameters: { type: "object", properties: {} },
           async execute() {
-            return { content: "已删除" };
+            return { content: "deleted" };
           },
         });
       },
     ]);
     const event = { assistantMessage: assistantMessage(), toolCall: { id: "c1", name: "delete_file", arguments: {} }, args: {} };
-    expect(await runner.emitToolCall(event)).toMatchObject({ block: true, reason: "禁止删除" });
-    // 非危险工具不拦
+    expect(await runner.emitToolCall(event)).toMatchObject({ block: true, reason: "deletion not allowed" });
+    // Non-dangerous tools are not blocked
     expect(
       await runner.emitToolCall({ assistantMessage: assistantMessage(), toolCall: { id: "c2", name: "hello", arguments: {} }, args: {} }),
     ).toBeUndefined();
   });
 
-  it("Intercept 全链路：被拦工具进错误 toolResult，模型可见拦截原因", async () => {
+  it("Intercept end to end: a blocked tool becomes an error toolResult and the model sees the block reason", async () => {
     const runner = await makeRunner(
       [
-        (pi) => pi.on("tool_call", async (e) => (e.toolCall.name === "delete_file" ? { block: true, reason: "guard：禁止删除" } : undefined)),
+        (pi) => pi.on("tool_call", async (e) => (e.toolCall.name === "delete_file" ? { block: true, reason: "guard: deletion not allowed" } : undefined)),
         (pi) =>
           pi.registerTool({
             name: "delete_file",
-            description: "删除",
+            description: "delete",
             parameters: { type: "object", properties: {} },
             async execute() {
-              return { content: "已删除" };
+              return { content: "deleted" };
             },
           }),
       ],
       { model: "m", activeTools: ["delete_file"] },
     );
     const deleteTool = runner.getRegisteredTools().find((t) => t.name === "delete_file");
-    if (!deleteTool) throw new Error("delete_file 未注册");
+    if (!deleteTool) throw new Error("delete_file not registered");
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: [deleteTool],
-      llm: new ScriptedLlm([toolStream([{ id: "c1", name: "delete_file", args: { path: "/tmp/x" } }]), textStream("完成")]),
+      llm: new ScriptedLlm([toolStream([{ id: "c1", name: "delete_file", args: { path: "/tmp/x" } }]), textStream("done")]),
       config: { model: "m", ...createExtensionAwareConfig(runner) },
     });
-    await agent.prompt("删");
+    await agent.prompt("delete");
     const blocked = agent.state.messages.find((m) => m.role === "toolResult" && m.toolName === "delete_file");
     expect(blocked?.isError).toBe(true);
-    expect(blocked?.text).toContain("guard：禁止删除");
+    expect(blocked?.text).toContain("guard: deletion not allowed");
   });
 
-  it("Extend：registerCommand 命令表 + 分发（args 与 ctx 注入，Pi registerCommand L1295）", async () => {
+  it("Extend: registerCommand command table + dispatch (args and ctx injection, Pi registerCommand L1295)", async () => {
     const calls: { args: string; cwd: string }[] = [];
     const runner = await makeRunner([
       (pi) => {
         pi.registerCommand("greet", {
-          description: "问候",
+          description: "greet",
           handler: (args, ctx) => {
             calls.push({ args, cwd: ctx.cwd });
           },
@@ -194,7 +194,7 @@ describe("extensions 运行时（10 章）", () => {
     await expect(runner.runCommand("nope")).rejects.toThrow("not found");
   });
 
-  it("loader：从目录加载全部教学扩展（default export 工厂，Pi loadExtensions L648）", async () => {
+  it("loader: loads all teaching extensions from the directory (default export factory, Pi loadExtensions L648)", async () => {
     const factories = await loadExtensionsFromDir(EXTENSIONS_DIR);
     const runner = await makeRunner(factories);
     const names = runner.getRegisteredTools().map((t) => t.name).sort();
@@ -203,55 +203,55 @@ describe("extensions 运行时（10 章）", () => {
     expect(runner.hasHandlers("tool_call")).toBe(true);
   });
 
-  it("Inject：on(context) 注入消息 → transformContext 输出变化（Pi sdk.ts L362-367）", async () => {
+  it("Inject: on(context) injects a message → the transformContext output changes (Pi sdk.ts L362-367)", async () => {
     const runner = await makeRunner([
       (pi) => {
         pi.on("context", async ({ messages }) => [
           ...messages,
-          { role: "user" as const, text: "注入：扩展上下文" },
+          { role: "user" as const, text: "Injected: extension context" },
         ]);
       },
     ]);
-    const out = await runner.emitContext([{ role: "user", text: "任务" }]);
+    const out = await runner.emitContext([{ role: "user", text: "task" }]);
     expect(out).toHaveLength(2);
-    expect(out[1]).toMatchObject({ text: "注入：扩展上下文" });
+    expect(out[1]).toMatchObject({ text: "Injected: extension context" });
   });
 
-  it("wrapper addedToolNames 联动：execute 中激活新工具 → 结果声明（Pi wrapper.ts L22-35）", async () => {
+  it("wrapper addedToolNames linkage: activating a new tool during execute → declared in the result (Pi wrapper.ts L22-35)", async () => {
     const config: RuntimeConfig = { model: "m", activeTools: ["echo"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session: new TreeSession() });
     const echo: ExtensionTool = {
       name: "echo",
-      description: "回显",
+      description: "echo",
       parameters: { type: "object", properties: {} },
       async execute(_args, ctx) {
-        ctx.setActiveTools([...ctx.getActiveTools(), "secret"]); // 解锁新工具（09 章 addedToolNames 语义的运行时版）
+        ctx.setActiveTools([...ctx.getActiveTools(), "secret"]); // Unlock a new tool (a runtime version of the Chapter 09 addedToolNames semantics)
         return { content: "hi" };
       },
     };
     const secret: ExtensionTool = {
       name: "secret",
-      description: "秘密",
+      description: "secret",
       parameters: { type: "object", properties: {} },
       async execute() {
         return { content: "s" };
       },
     };
     await runner.load([(pi) => pi.registerTool(echo), (pi) => pi.registerTool(secret)]);
-    // execute 后结果带 addedToolNames
+    // After execute the result carries addedToolNames
     const result = await runner.getRegisteredTools()[0].execute({});
     expect(result.addedToolNames).toContain("secret");
-    // loadTools 从注册表动态取出（循环侧动态加载闭环）
+    // loadTools fetches it dynamically from the registry (closing the loop-side dynamic loading)
     const aware = createExtensionAwareConfig(runner);
     expect(aware.loadTools(["secret"]).map((t) => t.name)).toContain("secret");
   });
 
-  it("Reconfigure 全链路：ctx.setActiveTools 立即更新 running agent.state.tools，下一次 provider call 可见（Pi setActiveToolsByName L950-972）", async () => {
+  it("Reconfigure end to end: ctx.setActiveTools updates the running agent.state.tools right away, visible on the next provider call (Pi setActiveToolsByName L950-972)", async () => {
     const config: RuntimeConfig = { model: "m", activeTools: ["read_fixture", "write_fixture"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session: new TreeSession() });
     const readFixture: ExtensionTool = {
       name: "read_fixture",
-      description: "只读占位（测试 fixture，非真编码工具）",
+      description: "read-only placeholder (test fixture, not a real coding tool)",
       parameters: { type: "object", properties: {} },
       async execute() {
         return { content: "r" };
@@ -259,7 +259,7 @@ describe("extensions 运行时（10 章）", () => {
     };
     const writeFixture: ExtensionTool = {
       name: "write_fixture",
-      description: "写入占位（测试 fixture，非真编码工具）",
+      description: "write placeholder (test fixture, not a real coding tool)",
       parameters: { type: "object", properties: {} },
       async execute() {
         return { content: "w" };
@@ -270,18 +270,18 @@ describe("extensions 运行时（10 章）", () => {
       (pi) => pi.registerTool(writeFixture),
       (pi) =>
         pi.registerCommand("readonly", {
-          description: "切换到只读工具集",
+          description: "switch to the read-only tool set",
           handler: async (_args, ctx) => {
             ctx.setActiveTools(["read_fixture"]);
           },
         }),
     ]);
 
-    // 组装：Agent 已构造（工具快照 = 两个 fixture）+ 绑定工具运行时（组装层持有完整宇宙）
+    // Assemble: the Agent is constructed (tool snapshot = the two fixtures) + bind the tool runtime (the assembly layer holds the full universe)
     const allTools = runner.getRegisteredTools();
-    const llm = new RecordingScriptedLlm([textStream("初始轮"), textStream("只读轮"), textStream("恢复轮")]);
+    const llm = new RecordingScriptedLlm([textStream("initial turn"), textStream("read-only turn"), textStream("restore turn")]);
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: allTools,
       llm,
       config: { model: "m", ...createExtensionAwareConfig(runner) },
@@ -293,41 +293,41 @@ describe("extensions 运行时（10 章）", () => {
       },
     });
 
-    // 切换前：provider 看到全部工具
-    await agent.prompt("初始");
+    // Before switching: the provider sees all tools
+    await agent.prompt("initial");
     expect(llm.calls[0]).toEqual(["read_fixture", "write_fixture"]);
 
-    // 扩展侧动作：命令 handler 调用 ctx.setActiveTools（extension → ctx → action → Agent，不拿 Agent）
+    // Extension-side action: the command handler calls ctx.setActiveTools (extension → ctx → action → Agent, never holding the Agent)
     await runner.runCommand("readonly");
     expect(agent.state.tools.map((t) => (t as Tool).name)).toEqual(["read_fixture"]);
-    expect(config.activeTools).toEqual(["read_fixture"]); // 配置同步
+    expect(config.activeTools).toEqual(["read_fixture"]); // config synced
 
-    // 下一次 provider call 立即看到新工具集
-    await agent.prompt("只读");
+    // The next provider call sees the new tool set right away
+    await agent.prompt("read-only");
     expect(llm.calls[1]).toEqual(["read_fixture"]);
 
-    // 恢复：全部工具回到下一次 provider call
+    // Restore: all tools come back on the next provider call
     runner.createContext().setActiveTools(["read_fixture", "write_fixture"]);
     expect(agent.state.tools.map((t) => (t as Tool).name)).toEqual(["read_fixture", "write_fixture"]);
-    await agent.prompt("恢复");
+    await agent.prompt("restore");
     expect(llm.calls[2]).toEqual(["read_fixture", "write_fixture"]);
   });
 
-  it("wrapper 守卫：execute 中同时增删工具时不报 addedToolNames（Pi wrapper.ts L26）", async () => {
+  it("wrapper guard: no addedToolNames when execute adds and removes tools at the same time (Pi wrapper.ts L26)", async () => {
     const config: RuntimeConfig = { model: "m", activeTools: ["echo", "drop"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session: new TreeSession() });
     const echo: ExtensionTool = {
       name: "echo",
-      description: "回显",
+      description: "echo",
       parameters: { type: "object", properties: {} },
       async execute(_args, ctx) {
-        ctx.setActiveTools(["echo", "secret"]); // 新增 secret、同时移除 drop
+        ctx.setActiveTools(["echo", "secret"]); // add secret and remove drop at the same time
         return { content: "hi" };
       },
     };
     const drop: ExtensionTool = {
       name: "drop",
-      description: "占位",
+      description: "placeholder",
       parameters: { type: "object", properties: {} },
       async execute() {
         return { content: "d" };
@@ -335,11 +335,11 @@ describe("extensions 运行时（10 章）", () => {
     };
     await runner.load([(pi) => pi.registerTool(echo), (pi) => pi.registerTool(drop)]);
     const result = await runner.getRegisteredTools()[0].execute({});
-    // Pi 守卫：任一工具被移除 → 直接返回原始结果，不报告 addedToolNames
+    // Pi guard: any tool removed → return the original result as is, no addedToolNames reported
     expect(result.addedToolNames).toBeUndefined();
   });
 
-  it("Observe：on(message_end) 收到事件（Pi on() 事件族）", async () => {
+  it("Observe: on(message_end) receives the event (Pi on() event family)", async () => {
     let seen = 0;
     const runner = await makeRunner([
       (pi) => {
@@ -349,9 +349,9 @@ describe("extensions 运行时（10 章）", () => {
       },
     ]);
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: [],
-      llm: new ScriptedLlm([textStream("完成")]),
+      llm: new ScriptedLlm([textStream("done")]),
       config: { model: "m" },
     });
     agent.subscribe(forwardAgentEvents(runner));
@@ -359,51 +359,51 @@ describe("extensions 运行时（10 章）", () => {
     expect(seen).toBeGreaterThanOrEqual(2); // user + assistant
   });
 
-  it("Persist：todo 状态存会话树，分支回溯后状态回到历史值（Pi todo.ts L114-133）", async () => {
+  it("Persist: todo state is stored in the session tree and returns to the historical value after branching back (Pi todo.ts L114-133)", async () => {
     const session = new TreeSession();
     const config: RuntimeConfig = { model: "m", activeTools: ["todo"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session });
     await runner.load(await loadExtensionsFromDir(EXTENSIONS_DIR));
     const todoTool = runner.getRegisteredTools().find((t) => t.name === "todo");
-    if (!todoTool) throw new Error("todo 未注册");
+    if (!todoTool) throw new Error("todo not registered");
 
-    // 模拟两轮工具执行 + 消息写树
-    const asst1: AssistantMessage = { role: "assistant", stopReason: "tool_use", toolCalls: [{ id: "c1", name: "todo", arguments: { action: "add", text: "任务一" } }] };
-    const asst2: AssistantMessage = { role: "assistant", stopReason: "tool_use", toolCalls: [{ id: "c2", name: "todo", arguments: { action: "add", text: "任务二" } }] };
-    const r1 = await todoTool.execute({ action: "add", text: "任务一" } as Record<string, unknown>);
+    // Simulate two turns of tool execution + writing messages to the tree
+    const asst1: AssistantMessage = { role: "assistant", stopReason: "tool_use", toolCalls: [{ id: "c1", name: "todo", arguments: { action: "add", text: "task one" } }] };
+    const asst2: AssistantMessage = { role: "assistant", stopReason: "tool_use", toolCalls: [{ id: "c2", name: "todo", arguments: { action: "add", text: "task two" } }] };
+    const r1 = await todoTool.execute({ action: "add", text: "task one" } as Record<string, unknown>);
     session.appendMessage(asst1);
     session.appendMessage({ role: "toolResult", toolCallId: "c1", toolName: "todo", text: r1.content, details: r1.details });
-    const r2 = await todoTool.execute({ action: "add", text: "任务二" } as Record<string, unknown>);
+    const r2 = await todoTool.execute({ action: "add", text: "task two" } as Record<string, unknown>);
     session.appendMessage(asst2);
     session.appendMessage({ role: "toolResult", toolCallId: "c2", toolName: "todo", text: r2.content, details: r2.details });
 
     const list = await todoTool.execute({ action: "list" } as Record<string, unknown>);
-    expect(list.content).toContain("任务一");
-    expect(list.content).toContain("任务二");
+    expect(list.content).toContain("task one");
+    expect(list.content).toContain("task two");
 
-    // 分支回溯到第一条 toolResult：状态自动回到历史值（树的第二个价值）
+    // Branch back to the first toolResult: state automatically returns to the historical value (the tree's second payoff)
     const firstTr = session.getBranch().find((e) => e.type === "message" && (e as { message: Message }).message.role === "toolResult");
-    if (!firstTr) throw new Error("toolResult 不存在");
+    if (!firstTr) throw new Error("toolResult does not exist");
     session.branch(firstTr.id);
     const listAfter = await todoTool.execute({ action: "list" } as Record<string, unknown>);
-    expect(listAfter.content).toContain("任务一");
-    expect(listAfter.content).not.toContain("任务二");
+    expect(listAfter.content).toContain("task one");
+    expect(listAfter.content).not.toContain("task two");
   });
 
-  it("组合：guard + hello + todo 全链路（Intercept + Extend + Observe + Persist 一次 run）", async () => {
+  it("Composition: guard + hello + todo end to end (Intercept + Extend + Observe + Persist in one run)", async () => {
     const session = new TreeSession();
     const config: RuntimeConfig = { model: "m", activeTools: ["hello", "todo", "delete_file"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session });
     await runner.load(await loadExtensionsFromDir(EXTENSIONS_DIR));
 
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: [createCalculatorTool(), ...runner.getVisibleTools()],
       llm: new ScriptedLlm([
         toolStream([{ id: "c1", name: "delete_file", args: { path: "/tmp/x" } }]),
-        toolStream([{ id: "c2", name: "todo", args: { action: "add", text: "任务" } }]),
+        toolStream([{ id: "c2", name: "todo", args: { action: "add", text: "task" } }]),
         toolStream([{ id: "c3", name: "hello", args: { name: "Alice" } }]),
-        textStream("完成"),
+        textStream("done"),
       ]),
       config: { model: "m", ...createExtensionAwareConfig(runner) },
     });
@@ -411,41 +411,41 @@ describe("extensions 运行时（10 章）", () => {
     agent.subscribe((event) => {
       if (event.type === "message_end") session.appendMessage(event.message);
     });
-    await agent.prompt("执行");
+    await agent.prompt("run");
 
     const msgs = agent.state.messages;
-    // Intercept：delete_file 被 guard 拦成错误结果
+    // Intercept: guard blocks delete_file into an error result
     const blocked = msgs.find((m) => m.role === "toolResult" && m.toolName === "delete_file");
     expect(blocked?.isError).toBe(true);
-    expect(blocked?.text).toContain("禁止删除");
-    // Extend：todo / hello 正常执行
+    expect(blocked?.text).toContain("deleting files is not allowed");
+    // Extend: todo / hello execute normally
     expect(msgs.some((m) => m.role === "toolResult" && m.toolName === "todo")).toBe(true);
     expect(msgs.some((m) => m.role === "toolResult" && m.toolName === "hello")).toBe(true);
-    // Persist：todo 状态可从会话树分支推导
+    // Persist: todo state can be derived from the session tree branch
     const todoTool = runner.getRegisteredTools().find((t) => t.name === "todo");
-    if (!todoTool) throw new Error("todo 未注册");
+    if (!todoTool) throw new Error("todo not registered");
     const list = await todoTool.execute({ action: "list" } as Record<string, unknown>);
-    expect(list.content).toContain("任务");
+    expect(list.content).toContain("task");
   });
 
-  it("todo 并行批次：同一批两次 add 不丢状态（module state 权威 + leaf 变化才重建）", async () => {
+  it("todo parallel batch: two adds in the same batch don't lose state (module state is the authority + rebuild only on leaf change)", async () => {
     const session = new TreeSession();
     const config: RuntimeConfig = { model: "m", activeTools: ["todo"] };
     const runner = new ExtensionRunner({ cwd: tmpdir(), config, session });
     await runner.load(await loadExtensionsFromDir(EXTENSIONS_DIR));
     const todoTool = runner.getRegisteredTools().find((t) => t.name === "todo");
-    if (!todoTool) throw new Error("todo 未注册");
+    if (!todoTool) throw new Error("todo not registered");
 
-    // 一条 assistant 消息带两个 todo add → 07 章 loop 默认并行执行（executeToolCallsParallel）
+    // One assistant message with two todo adds → the Chapter 07 loop executes them in parallel by default (executeToolCallsParallel)
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: runner.getVisibleTools(),
       llm: new ScriptedLlm([
         toolStream([
           { id: "c1", name: "todo", args: { action: "add", text: "A" } },
           { id: "c2", name: "todo", args: { action: "add", text: "B" } },
         ]),
-        textStream("完成"),
+        textStream("done"),
       ]),
       config: { model: "m", ...createExtensionAwareConfig(runner) },
     });
@@ -453,21 +453,21 @@ describe("extensions 运行时（10 章）", () => {
     agent.subscribe((event) => {
       if (event.type === "message_end") session.appendMessage(event.message);
     });
-    await agent.prompt("加两条");
+    await agent.prompt("add two");
 
     const list = await todoTool.execute({ action: "list" } as Record<string, unknown>);
-    // 并行批次下两次 execute 都基于内存态递增：不丢状态、编号不重
+    // In a parallel batch both executes increment from in-memory state: no lost state, no duplicate numbers
     expect(list.content).toContain("#1: A");
     expect(list.content).toContain("#2: B");
   });
 
-  it("loader 失败隔离：factory throw 不杀兄弟扩展，半注册不提交（Pi 逐路径收集 + discard）", async () => {
+  it("loader failure isolation: a factory throw doesn't kill sibling extensions and half registrations aren't committed (Pi per-path collection + discard)", async () => {
     const dir = tempDir();
     writeFileSync(
       join(dir, "bad-extension.ts"),
       [
         "export default function (pi) {",
-        "  pi.registerTool({ name: \"zombie\", description: \"僵尸\", parameters: { type: \"object\", properties: {} },",
+        "  pi.registerTool({ name: \"zombie\", description: \"zombie\", parameters: { type: \"object\", properties: {} },",
         "    async execute() { return { content: \"z\" }; } });",
         '  throw new Error("boom");',
         "}",
@@ -477,7 +477,7 @@ describe("extensions 运行时（10 章）", () => {
       join(dir, "good-extension.ts"),
       [
         "export default function (pi) {",
-        "  pi.registerTool({ name: \"hello\", description: \"问候\",",
+        "  pi.registerTool({ name: \"hello\", description: \"greet\",",
         "    parameters: { type: \"object\", properties: { name: { type: \"string\" } }, required: [\"name\"] },",
         "    async execute(args) { return { content: `Hello, ${String(args.name)}!` }; } });",
         "}",
@@ -485,30 +485,30 @@ describe("extensions 运行时（10 章）", () => {
     );
     const factories = await loadExtensionsFromDir(dir);
     const runner = await makeRunner(factories);
-    // zombie 在 throw 前已注册，必须随临时注册区一起被丢弃
+    // zombie was registered before the throw and must be discarded along with the staging registry
     expect(runner.getRegisteredTools().map((t) => t.name)).toEqual(["hello"]);
   });
 
-  it("Inject 链式：后一个 context handler 看到前一个的输出（Pi emitContext L984 链式）", async () => {
+  it("Inject chaining: a later context handler sees the previous one's output (Pi emitContext L984 chaining)", async () => {
     const runner = await makeRunner([
       (pi) => pi.on("context", async ({ messages }) => [...messages, { role: "user" as const, text: "A" }]),
       (pi) =>
         pi.on("context", async ({ messages }) => {
-          // 链式语义：这里必须已经看到 A 的注入（load 序 × 注册序）
+          // Chaining semantics: A's injection must already be visible here (load order × registration order)
           expect(messages.some((m) => m.text === "A")).toBe(true);
           return [...messages, { role: "user" as const, text: "B" }];
         }),
     ]);
-    const out = await runner.emitContext([{ role: "user", text: "任务" }]);
-    expect(out.map((m) => m.text)).toEqual(["任务", "A", "B"]);
+    const out = await runner.emitContext([{ role: "user", text: "task" }]);
+    expect(out.map((m) => m.text)).toEqual(["task", "A", "B"]);
   });
 
-  it("Intercept 短路：block 后后续 handler 不运行（Pi emitToolCall L932 短路）", async () => {
+  it("Intercept short-circuit: later handlers don't run after a block (Pi emitToolCall L932 short-circuit)", async () => {
     let sideEffects = 0;
     const runner = await makeRunner([
       (pi) =>
         pi.on("tool_call", async (e) =>
-          e.toolCall.name === "delete_file" ? { block: true, reason: "禁止" } : undefined,
+          e.toolCall.name === "delete_file" ? { block: true, reason: "not allowed" } : undefined,
         ),
       (pi) =>
         pi.on("tool_call", async () => {
@@ -521,11 +521,11 @@ describe("extensions 运行时（10 章）", () => {
       toolCall: { id: "c1", name: "delete_file", arguments: {} },
       args: {},
     });
-    expect(verdict).toMatchObject({ block: true, reason: "禁止" });
+    expect(verdict).toMatchObject({ block: true, reason: "not allowed" });
     expect(sideEffects).toBe(0);
   });
 
-  it("错误隔离：handler 抛错不击穿兄弟 handler 与 dispatch（Pi 每 handler try/catch）", async () => {
+  it("error isolation: a handler that throws doesn't break sibling handlers or the dispatch (Pi per-handler try/catch)", async () => {
     const ran: string[] = [];
     const runner = await makeRunner([
       (pi) =>
@@ -537,18 +537,18 @@ describe("extensions 运行时（10 章）", () => {
           ran.push("B");
         }),
     ]);
-    // dispatch 本身不抛；B 照常运行
+    // dispatch itself doesn't throw; B runs as usual
     await expect(runner.emit("message_end", { message: { role: "user", text: "hi" } })).resolves.toBeDefined();
     expect(ran).toEqual(["B"]);
   });
 
-  it("async factory：await 后注册照常生效（Pi ExtensionFactory 支持 Promise<void>）", async () => {
+  it("async factory: registration after await still takes effect (Pi ExtensionFactory supports Promise<void>)", async () => {
     const runner = await makeRunner([
       async (pi) => {
         await Promise.resolve();
         pi.registerTool({
           name: "hello",
-          description: "问候",
+          description: "greet",
           parameters: { type: "object", properties: {} },
           async execute() {
             return { content: "hi" };
@@ -559,21 +559,21 @@ describe("extensions 运行时（10 章）", () => {
     expect(runner.getRegisteredTools().map((t) => t.name)).toEqual(["hello"]);
   });
 
-  it("回归：空 runner 接线不改变 Agent 基线（无扩展 → hooks 直通）", async () => {
+  it("regression: wiring an empty runner doesn't change the Agent baseline (no extensions → hooks pass through)", async () => {
     const runner = await makeRunner([]);
     const aware = createExtensionAwareConfig(runner);
-    // transformContext 原样返回
-    const msgs: Message[] = [{ role: "user", text: "任务" }];
+    // transformContext returns its input unchanged
+    const msgs: Message[] = [{ role: "user", text: "task" }];
     expect(await aware.transformContext(msgs)).toEqual(msgs);
-    // beforeToolCall 不拦截
+    // beforeToolCall doesn't block
     const verdict = await aware.beforeToolCall({
       assistantMessage: assistantMessage(),
       toolCall: { id: "c1", name: "hello", arguments: {} },
       args: {},
-      context: { systemPrompt: "助手", messages: msgs },
+      context: { systemPrompt: "assistant", messages: msgs },
     });
     expect(verdict).toBeUndefined();
-    // loadTools 无新增
+    // loadTools adds nothing
     expect(aware.loadTools(["hello"])).toEqual([]);
   });
 

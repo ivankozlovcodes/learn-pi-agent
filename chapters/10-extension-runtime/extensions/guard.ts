@@ -1,14 +1,14 @@
 /**
- * 教学扩展：guard 拦截（Intercept 能力）。
- * 订阅 tool_call 事件，危险工具（delete_file）直接 block（Pi permission-gate 的最小版，
- * 完整案例在 11 章 Extension Composition）。
+ * Teaching extension: the guard block (Intercept capability).
+ * Subscribes to the tool_call event and blocks the dangerous tool (delete_file) outright (a minimal version of Pi permission-gate;
+ * the full case is in Chapter 11 Extension Composition).
  */
 import type { ExtensionAPI } from "../src/extension-api.ts";
 
 export default function (pi: ExtensionAPI): void {
   pi.on("tool_call", async (event) => {
     if (event.toolCall.name === "delete_file") {
-      return { block: true, reason: "guard 扩展：禁止删除文件（危险操作）" };
+      return { block: true, reason: "guard extension: deleting files is not allowed (dangerous operation)" };
     }
     return undefined;
   });

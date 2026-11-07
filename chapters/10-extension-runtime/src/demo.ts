@@ -1,10 +1,10 @@
 /**
- * 真实 API 演示：Extension Runtime。
- * 流程：加载 extensions/ 目录四个扩展 → 打印注册的工具/命令 → 组装（07 Agent + TreeSession
- * + createExtensionAwareConfig + 事件转发）→ 模型使用 hello/todo 工具、delete_file 被 guard
- * 拦截 → /todos 命令查看待办。
- * 前置条件：可用的 LLM API 凭据；模型经环境变量 CLAUDE_MODEL 指定。
- * 运行：npm run demo
+ * Real API demo: Extension Runtime.
+ * Flow: load the four extensions in extensions/ → print the registered tools/commands → assemble (07 Agent + TreeSession
+ * + createExtensionAwareConfig + event forwarding) → the model uses the hello/todo tools, delete_file is blocked
+ * by guard → the /todos command shows the todos.
+ * Prerequisites: working LLM API credentials; the model is set via the CLAUDE_MODEL environment variable.
+ * Run: npm run demo
  */
 import { fileURLToPath } from "node:url";
 import { AnthropicLlmAdapter, createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
@@ -19,10 +19,10 @@ const EXTENSIONS_DIR = fileURLToPath(new URL("../extensions", import.meta.url));
 async function main(): Promise<void> {
   const model = process.env.CLAUDE_MODEL;
   if (!model) {
-    throw new Error("请设置 CLAUDE_MODEL 环境变量指定要使用的模型");
+    throw new Error("Set the CLAUDE_MODEL environment variable to the model to use");
   }
 
-  // 1. 加载扩展（loader：目录发现 + default export 工厂）
+  // 1. Load the extensions (loader: directory discovery + default export factory)
   const factories = await loadExtensionsFromDir(EXTENSIONS_DIR);
   const runner = new ExtensionRunner({
     cwd: process.cwd(),
@@ -31,19 +31,19 @@ async function main(): Promise<void> {
   });
   await runner.load(factories);
 
-  // 2. 激活全部注册工具（Reconfigure 动作：ctx.setActiveTools，与 11 章 plan-mode 同一 seam）
+  // 2. Activate all registered tools (Reconfigure action: ctx.setActiveTools, the same seam as Chapter 11 plan-mode)
   const ctx = runner.createContext();
   ctx.setActiveTools(runner.getRegisteredTools().map((t) => t.name));
 
-  console.log("=== 扩展加载完成 ===");
-  console.log("· 工具:", runner.getVisibleTools().map((t) => t.name).join(", "));
-  console.log("· 命令:", runner.getCommands().map((c) => `/${c.name}`).join(", "));
-  console.log(`· tool_call 拦截已注册: ${runner.hasHandlers("tool_call")}`);
+  console.log("=== Extensions loaded ===");
+  console.log("· tools:", runner.getVisibleTools().map((t) => t.name).join(", "));
+  console.log("· commands:", runner.getCommands().map((c) => `/${c.name}`).join(", "));
+  console.log(`· tool_call interception registered: ${runner.hasHandlers("tool_call")}`);
 
-  // 3. 组装：07 Agent + 扩展钩子（beforeToolCall → Intercept、transformContext → Inject、loadTools 联动）
-  //    + 事件转发（Observe）+ 消息写会话树（Persist 的落点）
+  // 3. Assemble: 07 Agent + extension hooks (beforeToolCall → Intercept, transformContext → Inject, loadTools linkage)
+  //    + event forwarding (Observe) + messages written to the session tree (where Persist lands)
   const agent = new Agent({
-    systemPrompt: "你是一个助手。可用工具：calculator（计算）、hello（问候）、todo（待办）、delete_file（删除文件）。",
+    systemPrompt: "You are an assistant. Available tools: calculator (math), hello (greeting), todo (todos), delete_file (delete a file).",
     tools: [createCalculatorTool(), ...runner.getVisibleTools()],
     llm: new AnthropicLlmAdapter(),
     config: { model, ...createExtensionAwareConfig(runner) },
@@ -56,26 +56,26 @@ async function main(): Promise<void> {
   });
   agent.subscribe((event) => {
     if (event.type === "tool_execution_end") {
-      const tag = event.isError ? "（被拦截）" : "";
-      console.log(`· 工具: ${event.toolName} → ${event.result.content}${tag}`);
+      const tag = event.isError ? " (blocked)" : "";
+      console.log(`· tool: ${event.toolName} → ${event.result.content}${tag}`);
     }
     if (event.type === "message_end" && event.message.role === "assistant" && event.message.text) {
-      console.log(`· 回复: ${event.message.text}`);
+      console.log(`· reply: ${event.message.text}`);
     }
   });
 
-  console.log("\n=== 运行（hello + todo + delete_file 被拦）===");
+  console.log("\n=== Run (hello + todo + delete_file blocked) ===");
   await agent.prompt(
-    "先用 hello 工具问候 Alice，然后用 todo 工具添加两条待办：写代码 review、修复 bug，最后尝试用 delete_file 删除 /tmp/learn-pi-agent-demo-remove-me.txt。",
+    "First greet Alice with the hello tool, then add two todos with the todo tool: write code review, fix bug. Finally, try to delete /tmp/learn-pi-agent-demo-remove-me.txt with delete_file.",
   );
 
-  // 4. 命令演示：/todos 查看当前分支的待办（Persist：状态从会话树推导）
-  console.log("\n=== /todos 命令（状态从会话树分支推导）===");
+  // 4. Command demo: /todos shows the todos on the current branch (Persist: state is derived from the session tree)
+  console.log("\n=== /todos command (state derived from the session tree branch) ===");
   await runner.runCommand("todos", ctx);
-  console.log(`会话树 leaf: ${ctx.session.getLeafId()}`);
+  console.log(`session tree leaf: ${ctx.session.getLeafId()}`);
 }
 
 main().catch((error: unknown) => {
-  console.error("\n演示失败:", error instanceof Error ? error.message : String(error));
+  console.error("\nDemo failed:", error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

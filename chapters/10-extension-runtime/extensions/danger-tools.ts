@@ -1,7 +1,7 @@
 /**
- * 教学扩展：危险工具集（被 guard 拦截的演示对象）。
- * delete_file：删除单个文件（演示用临时文件）；被 guard 的 tool_call 拦截时不会执行。
- * 说明：只删除单个文件，不做递归；guard 拦截后 execute 根本不触发。
+ * Teaching extension: a set of dangerous tools (the demo target that guard blocks).
+ * delete_file: deletes a single file (a temp file for the demo); it doesn't run when guard's tool_call hook blocks it.
+ * Note: it deletes only a single file, not recursively; after guard blocks it, execute never fires.
  */
 import { rm } from "node:fs/promises";
 import type { ExtensionAPI } from "../src/extension-api.ts";
@@ -9,16 +9,16 @@ import type { ExtensionAPI } from "../src/extension-api.ts";
 export default function (pi: ExtensionAPI): void {
   pi.registerTool({
     name: "delete_file",
-    description: "删除指定文件（危险操作，会被 guard 拦截）",
+    description: "Delete the given file (dangerous operation; guard blocks it)",
     parameters: {
       type: "object",
-      properties: { path: { type: "string", description: "要删除的文件路径" } },
+      properties: { path: { type: "string", description: "Path of the file to delete" } },
       required: ["path"],
     },
     async execute(args) {
       const path = String(args.path);
       await rm(path, { force: true });
-      return { content: `已删除 ${path}` };
+      return { content: `Deleted ${path}` };
     },
   });
 }

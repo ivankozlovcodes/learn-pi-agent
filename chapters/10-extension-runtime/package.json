@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 10 章：Extension Runtime（可编程 Harness 边界，Part III Understand it）",
+  "description": "learn-pi-agent Chapter 10: Extension Runtime (the programmable Harness boundary, Part III Understand it)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",

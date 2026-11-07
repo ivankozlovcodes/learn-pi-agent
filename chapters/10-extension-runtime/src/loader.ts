@@ -1,20 +1,20 @@
 /**
- * 10 章核心：扩展加载器（Pi loader.ts 的教学子集）。
+ * Chapter 10 core: the extension loader (teaching subset of Pi loader.ts).
  *
- * Pi 的发现逻辑（loader.ts）：resolveExtensionEntries 检查 package.json 的 pi.extensions 字段
- * 或 index.ts 入口（L758 附近），loadExtensions（L648）逐文件动态 import，default export 即扩展工厂。
- * 教学简化：目录下所有 .ts/.js 文件都是扩展入口（package.json 字段发现不教）。
+ * Pi's discovery logic (loader.ts): resolveExtensionEntries checks the pi.extensions field in package.json
+ * or an index.ts entry (around L758); loadExtensions (L648) dynamically imports each file, and the default export is the extension factory.
+ * Teaching simplification: every .ts/.js file in the directory is an extension entry (package.json field discovery is not covered).
  */
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ExtensionFactory } from "./extension-api.ts";
 
-/** 从目录加载全部扩展工厂（Pi loadExtensions L648 教学简化版）。
+/** Load all extension factories from a directory (a simplified teaching version of Pi loadExtensions L648).
  *
- * 失败隔离（Pi 逐路径收集错误、继续加载，loader.ts L566-588 教学版）：
- * 单个文件 import 失败 / default export 非函数，只 warn + 跳过，不杀其余扩展。
- * factory 执行期的失败隔离在 runner.load 的临时注册区（commit/discard）。
+ * Failure isolation (Pi collects errors per path and keeps loading; teaching version of loader.ts L566-588):
+ * if a single file fails to import or its default export isn't a function, just warn and skip; the other extensions survive.
+ * Failure isolation while a factory runs lives in runner.load's staging registry (commit/discard).
  */
 export async function loadExtensionsFromDir(dir: string): Promise<ExtensionFactory[]> {
   const factories: ExtensionFactory[] = [];
@@ -27,11 +27,11 @@ export async function loadExtensionsFromDir(dir: string): Promise<ExtensionFacto
       if (typeof factory === "function") {
         factories.push(factory as ExtensionFactory);
       } else {
-        // Pi 对非函数 default export 报 loader error（loader.ts L578-580）；教学 skip + warn
-        console.warn(`扩展文件 ${name} 的 default export 不是函数，跳过`);
+        // Pi reports a loader error for a non-function default export (loader.ts L578-580); the teaching version skips + warns
+        console.warn(`Extension file ${name}: default export is not a function, skipping`);
       }
     } catch (error) {
-      console.warn(`扩展文件 ${name} 加载失败，跳过:`, error instanceof Error ? error.message : String(error));
+      console.warn(`Extension file ${name} failed to load, skipping:`, error instanceof Error ? error.message : String(error));
     }
   }
   return factories;

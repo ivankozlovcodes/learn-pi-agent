@@ -1,96 +1,96 @@
 /**
- * 10 章核心：ExtensionAPI 教学子集（Reduce it，精读 Pi coding-agent extensions/types.ts）。
+ * Chapter 10 core: the teaching subset of ExtensionAPI (Reduce it, a close reading of Pi coding-agent extensions/types.ts).
  *
- * Pi 的 ExtensionAPI（types.ts L1237-1261 起）有 70+ API：on() 约 35 个事件、registerTool、
- * registerCommand/registerShortcut/registerFlag、registerProvider、getCommands、UI 域等。
- * 教学只取六类能力的最小骨架（全部锚定 Pi）：
+ * Pi's ExtensionAPI (types.ts from L1237-1261) has 70+ APIs: about 35 events on on(), registerTool,
+ * registerCommand/registerShortcut/registerFlag, registerProvider, getCommands, the UI domain, and more.
+ * The teaching version takes only a minimal skeleton of six capabilities (all anchored in Pi):
  *
- * | 能力 | Pi 锚点 | 教学子集 |
+ * | Capability | Pi anchor | Teaching subset |
  * |---|---|---|
- * | Observe（订阅） | on() 事件族 L1237-1261 | on("message_end"/"turn_end") |
- * | Intercept（拦截） | on("tool_call") → ToolCallEventResult | on("tool_call") → { block, reason } |
- * | Extend（扩展） | registerTool（ToolDefinition 类型 L449、方法签名 L1286）/ registerCommand L1295 | 同左 |
- * | Reconfigure（配置） | ExtensionAPI 配置域（setActiveTools L1384） | ctx.getActiveTools/setActiveTools 动作（bindToolRuntime 写 running Agent；config.activeTools 为同步数据） |
- * | Inject（注入） | on("context") → ContextEventResult；sdk.ts transformContext → emitContext | on("context") → 返回 Message[] |
- * | Persist（持久化） | ctx.sessionManager + appendCustomEntry | ctx.session（07 章 TreeSession） |
+ * | Observe (subscribe) | on() event family L1237-1261 | on("message_end"/"turn_end") |
+ * | Intercept (intercept) | on("tool_call") → ToolCallEventResult | on("tool_call") → { block, reason } |
+ * | Extend (extend) | registerTool (ToolDefinition type L449, method signature L1286) / registerCommand L1295 | same as left |
+ * | Reconfigure (configure) | ExtensionAPI config domain (setActiveTools L1384) | ctx.getActiveTools/setActiveTools actions (bindToolRuntime writes the running Agent; config.activeTools is synced data) |
+ * | Inject (inject) | on("context") → ContextEventResult; sdk.ts transformContext → emitContext | on("context") → returns Message[] |
+ * | Persist (persist) | ctx.sessionManager + appendCustomEntry | ctx.session (Chapter 07 TreeSession) |
  *
- * 教学简化：事件 35+ → 4、ExtensionMode 多模式 → "cli"、
- * registerProvider/UI 域（theme/keybindings/statusline）/getArgumentCompletions 不教。
+ * Teaching simplifications: 35+ events → 4, multiple ExtensionMode modes → "cli",
+ * registerProvider / the UI domain (theme/keybindings/statusline) / getArgumentCompletions are not covered.
  */
 import type { AssistantMessage, Message, Tool, ToolCall, ToolParameters, ToolResult } from "../../00-minimal-llm-call/src/index.ts";
 import type { TreeSession } from "../../07-session-tree/src/session-tree.ts";
 
-/** 事件集合：Pi on() 事件族（types.ts L1237-1261）的教学子集。 */
+/** Event set: the teaching subset of Pi's on() event family (types.ts L1237-1261). */
 export interface ExtensionEvents {
-  /** Intercept：工具调用前（Pi ToolCallEvent，L932 emitToolCall）。 */
+  /** Intercept: before a tool call (Pi ToolCallEvent, L932 emitToolCall). */
   tool_call: { assistantMessage: AssistantMessage; toolCall: ToolCall; args: unknown };
-  /** Inject：LLM 调用前的上下文变换（Pi ContextEvent + sdk.ts L362-367 emitContext）。 */
+  /** Inject: context transform before the LLM call (Pi ContextEvent + sdk.ts L362-367 emitContext). */
   context: { messages: Message[] };
-  /** Observe：单条消息结束（Pi MessageEndEvent）。 */
+  /** Observe: a single message ends (Pi MessageEndEvent). */
   message_end: { message: Message };
-  /** Observe：回合结束（Pi TurnEndEvent）。 */
+  /** Observe: turn end (Pi TurnEndEvent). */
   turn_end: { message: Message; toolResults: Message[] };
 }
 
-/** tool_call 事件的返回：拦截语义（Pi ToolCallEventResult 教学子集：block/reason）。 */
+/** Return value of the tool_call event: block semantics (teaching subset of Pi ToolCallEventResult: block/reason). */
 export interface ToolCallEventResult {
   block?: boolean;
   reason?: string;
 }
 
-/** context 事件的返回：注入后的消息（Pi ContextEventResult 教学简化：返回 Message[] 或不返回）。 */
+/** Return value of the context event: the messages after injection (Pi ContextEventResult simplified for teaching: return Message[] or nothing). */
 export type ContextEventResult = Message[] | void;
 
-/** 事件处理函数：Pi ExtensionHandler（types.ts L1225-1227，event + ctx）。 */
+/** Event handler function: Pi ExtensionHandler (types.ts L1225-1227, event + ctx). */
 export type ExtensionHandler<K extends keyof ExtensionEvents> = (
   event: ExtensionEvents[K],
   ctx: ExtensionContext,
 ) => unknown;
 
 /**
- * 工具运行时绑定：组装层（demo/测试）把「名字 → Tool」的解析与「写入 running Agent」交给 runner
- * （Pi bindCore 的 setActiveTools 动作，agent-session.ts L2583 → setActiveToolsByName L950-972）。
- * invariant：Extension 只调用 ctx.setActiveTools 动作，永远不拿到 Agent 实例。
+ * Tool runtime binding: the assembly layer (demo/tests) hands the runner "name → Tool" resolution and "write to the running Agent"
+ * (Pi bindCore's setActiveTools action, agent-session.ts L2583 → setActiveToolsByName L950-972).
+ * invariant: an Extension only calls the ctx.setActiveTools action and never gets the Agent instance.
  */
 export interface ToolRuntimeBinding {
-  /** 按名字解析为 Tool（组装层持有完整工具宇宙：内置工具 + 扩展注册表）；未知名忽略。 */
+  /** Resolve names to Tools (the assembly layer holds the full tool universe: built-in tools + extension registry); unknown names are ignored. */
   resolve(toolNames: string[]): Tool[];
-  /** 把解析结果立即写入 running Agent 的 state.tools（下一次 provider call 可见）。 */
+  /** Write the resolved tools to the running Agent's state.tools right away (visible on the next provider call). */
   apply(tools: Tool[]): void;
 }
 
-/** 扩展上下文：Pi ExtensionContext（types.ts L310 起；L307-309 是 ExtensionMode）教学子集。 */
+/** Extension context: the teaching subset of Pi ExtensionContext (types.ts from L310; L307-309 is ExtensionMode). */
 export interface ExtensionContext {
-  /** 当前工作目录（Pi ctx.cwd）。 */
+  /** Current working directory (Pi ctx.cwd). */
   cwd: string;
-  /** 运行模式（Pi ExtensionMode L307 多模式，教学只教 "cli"）。 */
+  /** Run mode (Pi ExtensionMode L307 has several modes; the teaching version covers only "cli"). */
   mode: "cli";
-  /** Reconfigure 最小域：运行配置（activeTools 为动作同步的数据，切换必须走 setActiveTools）。 */
+  /** Minimal Reconfigure domain: runtime config (activeTools is data synced by the action; switching must go through setActiveTools). */
   config: RuntimeConfig;
-  /** Persist 最小域：07 章会话树（Pi ctx.sessionManager 只读访问的教学简化）。 */
+  /** Minimal Persist domain: the Chapter 07 session tree (a teaching simplification of Pi's read-only ctx.sessionManager access). */
   session: TreeSession;
-  /** Reconfigure 动作：当前活跃工具名（Pi ExtensionAPI getActiveTools L1378）。 */
+  /** Reconfigure action: the current active tool names (Pi ExtensionAPI getActiveTools L1378). */
   getActiveTools(): string[];
   /**
-   * Reconfigure 动作：切换活跃工具集（Pi ExtensionAPI setActiveTools L1384 →
-   * setActiveToolsByName：按名解析、未知名忽略、立即写 agent.state.tools、同步 config.activeTools。
-   * Pi 附带 system prompt 重建，教学不教）。
+   * Reconfigure action: switch the active tool set (Pi ExtensionAPI setActiveTools L1384 →
+   * setActiveToolsByName: resolve by name, ignore unknown names, write agent.state.tools right away, sync config.activeTools.
+   * Pi also rebuilds the system prompt; the teaching version doesn't cover that).
    */
   setActiveTools(toolNames: string[]): void;
 }
 
-/** 最小运行配置（Reconfigure 能力）。 */
+/** Minimal runtime config (Reconfigure capability). */
 export interface RuntimeConfig {
-  /** 当前模型。 */
+  /** Current model. */
   model: string;
   /**
-   * 当前对模型可见的工具名（查询接口：组装层初始声明，setActiveTools 动作同步写回；
-   * 扩展不得直接 mutation——切换必须走 ctx.setActiveTools）。
+   * Tool names currently visible to the model (query interface: declared initially by the assembly layer, written back by the setActiveTools action;
+   * extensions must not mutate it directly: switching must go through ctx.setActiveTools).
    */
   activeTools: string[];
 }
 
-/** 扩展工具：Pi ToolDefinition.execute(..., ctx)（types.ts L449 起 ToolDefinition 类型）教学简化，ctx 由 wrapper 注入。 */
+/** Extension tool: Pi ToolDefinition.execute(..., ctx) (ToolDefinition type from types.ts L449) simplified for teaching; ctx is injected by the wrapper. */
 export interface ExtensionTool {
   name: string;
   description: string;
@@ -103,22 +103,22 @@ export interface ExtensionTool {
   ): Promise<ToolResult>;
 }
 
-/** 注册的命令：Pi RegisteredCommand（L1295 registerCommand）教学子集。 */
+/** Registered command: the teaching subset of Pi RegisteredCommand (L1295 registerCommand). */
 export interface RegisteredCommand {
   name: string;
   description: string;
   handler: (args: string, ctx: ExtensionContext) => Promise<void> | void;
 }
 
-/** 扩展工厂：default export 收 ExtensionAPI（Pi loader：模块 default export 即扩展入口）。 */
+/** Extension factory: the default export receives ExtensionAPI (Pi loader: a module's default export is the extension entry point). */
 export type ExtensionFactory = (pi: ExtensionAPI) => void | Promise<void>;
 
-/** 扩展 API：传给扩展工厂的界面（Pi ExtensionAPI 教学子集）。 */
+/** Extension API: the surface passed to the extension factory (teaching subset of Pi ExtensionAPI). */
 export interface ExtensionAPI {
-  /** 订阅事件（Observe / Intercept / Inject 的统一入口）。 */
+  /** Subscribe to events (the single entry point for Observe / Intercept / Inject). */
   on<K extends keyof ExtensionEvents>(event: K, handler: ExtensionHandler<K>): void;
-  /** 注册工具（Extend）：LLM 可调用的工具，wrapper 注入 ctx。 */
+  /** Register a tool (Extend): a tool the LLM can call; the wrapper injects ctx. */
   registerTool(tool: ExtensionTool): void;
-  /** 注册命令（Extend）：用户命令。 */
+  /** Register a command (Extend): a user command. */
   registerCommand(name: string, options: Omit<RegisteredCommand, "name">): void;
 }

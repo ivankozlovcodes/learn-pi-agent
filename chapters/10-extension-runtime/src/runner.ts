@@ -1,13 +1,13 @@
 /**
- * 10 章核心：ExtensionRunner（Pi runner.ts L268 的教学子集）。
+ * Chapter 10 core: ExtensionRunner (teaching subset of Pi runner.ts L268).
  *
- * 职责四件：
- * 1. 事件分发：hasHandlers（L569）+ emit（L801）+ emitToolCall（L932 拦截短路）+ emitContext（L984 链式）；
- * 2. 上下文：createContext（L673，Pi 用惰性 getter + assertActive，教学简化为直接对象）；
- * 3. 收集：registerTool / registerCommand（工厂通过 ExtensionAPI 写入临时注册区，成功后并入 runner；
- *    throw 则整体丢弃——Pi initializeExtension 的 commit/discard 教学版）；
- * 4. Reconfigure 动作：bindToolRuntime 绑定组装层的工具宇宙与 running Agent，
- *    ctx.setActiveTools 经此立即写 agent.state.tools（Pi setActiveToolsByName L950-972 的教学版）。
+ * Four responsibilities:
+ * 1. Event dispatch: hasHandlers (L569) + emit (L801) + emitToolCall (L932, short-circuits on block) + emitContext (L984, chained);
+ * 2. Context: createContext (L673; Pi uses lazy getters + assertActive, simplified here to a plain object);
+ * 3. Collection: registerTool / registerCommand (the factory writes into a staging registry via ExtensionAPI, merged into the runner on success;
+ *    on throw it is discarded as a whole: a teaching version of Pi initializeExtension's commit/discard);
+ * 4. Reconfigure action: bindToolRuntime binds the assembly layer's tool universe and the running Agent,
+ *    and ctx.setActiveTools goes through it to write agent.state.tools right away (teaching version of Pi setActiveToolsByName L950-972).
  */
 import type { Message } from "../../00-minimal-llm-call/src/index.ts";
 import type {
@@ -23,14 +23,14 @@ import type {
 import { wrapRegisteredTools } from "./wrapper.ts";
 import type { Tool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 运行时上下文快照（createContext 用）。 */
+/** Runtime context snapshot (used by createContext). */
 export interface RunnerOptions {
   cwd: string;
   config: RuntimeConfig;
   session: ExtensionContext["session"];
 }
 
-/** 单个扩展工厂的临时注册区（Pi 每扩展 Extension 对象注册表的教学压缩）。 */
+/** Staging registry for a single extension factory (a teaching compression of Pi's per-extension Extension object registry). */
 interface PendingRegistrations {
   handlers: Map<string, Set<(event: unknown, ctx: ExtensionContext) => unknown>>;
   tools: ExtensionTool[];
@@ -56,17 +56,17 @@ export class ExtensionRunner {
   }
 
   /**
-   * 加载扩展工厂（Pi loadExtensions：default export 收 ExtensionAPI）。
-   * 失败隔离（Pi initializeExtension + createExtensionAPI 的 commit/discard 教学版）：
-   * 每个 factory 先写临时注册区，成功后并入 runner；throw 则整体丢弃，
-   * 不留半注册 extension，且不影响其余工厂。
+   * Load extension factories (Pi loadExtensions: the default export receives ExtensionAPI).
+   * Failure isolation (teaching version of Pi initializeExtension + createExtensionAPI commit/discard):
+   * each factory first writes into a staging registry, merged into the runner on success; on throw it is discarded as a whole,
+   * leaving no half-registered extension and not affecting the other factories.
    */
   async load(factories: ExtensionFactory[]): Promise<void> {
     for (const factory of factories) {
       const pending: PendingRegistrations = { handlers: new Map(), tools: [], commands: [] };
       try {
         await factory(this.createAPI(pending));
-        // commit：并入 runner 注册表（保持 load 序 × 注册序）
+        // commit: merge into the runner registry (keeping load order × registration order)
         for (const [type, handlers] of pending.handlers) {
           const set = this.handlers.get(type) ?? new Set();
           for (const handler of handlers) {
@@ -77,21 +77,21 @@ export class ExtensionRunner {
         this.tools.push(...pending.tools);
         this.commands.push(...pending.commands);
       } catch (error) {
-        // discard：临时注册区整体丢弃（Pi load.discard() 的教学版）
+        // discard: drop the whole staging registry (teaching version of Pi load.discard())
         console.warn(
-          `扩展工厂执行失败，其注册全部丢弃:`,
+          `Extension factory failed; all its registrations were discarded:`,
           error instanceof Error ? error.message : String(error),
         );
       }
     }
   }
 
-  /** 事件类型是否有人订阅（Pi hasHandlers L569）。 */
+  /** Whether anyone subscribes to the event type (Pi hasHandlers L569). */
   hasHandlers(type: string): boolean {
     return (this.handlers.get(type)?.size ?? 0) > 0;
   }
 
-  /** 通用事件分发（Pi emit L801）：Observe / Inject。返回所有 handler 结果。 */
+  /** Generic event dispatch (Pi emit L801): Observe / Inject. Returns all handler results. */
   async emit<K extends keyof ExtensionEvents>(type: K, event: ExtensionEvents[K]): Promise<unknown[]> {
     const hs = this.handlers.get(type);
     if (!hs || hs.size === 0) return [];
@@ -101,16 +101,16 @@ export class ExtensionRunner {
       try {
         results.push(await handler(event, ctx));
       } catch (error) {
-        // 扩展 handler 抛错不击穿循环（Pi runner 的错误监听；教学简化为警告）
-        console.warn(`扩展事件 ${type} handler 抛错:`, error instanceof Error ? error.message : String(error));
+        // An extension handler that throws doesn't break the loop (Pi runner's error listener; simplified to a warning here)
+        console.warn(`Extension event ${type} handler threw:`, error instanceof Error ? error.message : String(error));
       }
     }
     return results;
   }
 
   /**
-   * Intercept：tool_call 事件，任一 handler 返回 block 即短路（Pi emitToolCall L932：
-   * block 后后续 handler 不运行——permission-gate 类策略依赖此语义）。
+   * Intercept: the tool_call event short-circuits as soon as any handler returns block (Pi emitToolCall L932:
+   * after a block, later handlers don't run; permission-gate style policies rely on this).
    */
   async emitToolCall(event: ExtensionEvents["tool_call"]): Promise<ToolCallEventResult | undefined> {
     const hs = this.handlers.get("tool_call");
@@ -123,13 +123,13 @@ export class ExtensionRunner {
           return { block: true, reason: verdict.reason };
         }
       } catch (error) {
-        console.warn(`扩展事件 tool_call handler 抛错:`, error instanceof Error ? error.message : String(error));
+        console.warn(`Extension event tool_call handler threw:`, error instanceof Error ? error.message : String(error));
       }
     }
     return undefined;
   }
 
-  /** Inject：context 事件链式变换（Pi emitContext L984：后一个 handler 看到前一个的输出）。 */
+  /** Inject: chained transform for the context event (Pi emitContext L984: each handler sees the previous one's output). */
   async emitContext(messages: Message[]): Promise<Message[]> {
     const hs = this.handlers.get("context");
     if (!hs || hs.size === 0) return messages;
@@ -142,39 +142,39 @@ export class ExtensionRunner {
           current = result;
         }
       } catch (error) {
-        console.warn(`扩展事件 context handler 抛错:`, error instanceof Error ? error.message : String(error));
+        console.warn(`Extension event context handler threw:`, error instanceof Error ? error.message : String(error));
       }
     }
     return current;
   }
 
-  /** 当前上下文（Pi createContext L673；教学版直接返回快照）。 */
+  /** Current context (Pi createContext L673; the teaching version returns the snapshot directly). */
   createContext(): ExtensionContext {
     return this.ctx;
   }
 
-  /** 当前可见工具名（Pi getActiveTools；教学版 = config.activeTools 快照）。 */
+  /** Currently visible tool names (Pi getActiveTools; teaching version = a snapshot of config.activeTools). */
   getActiveTools(): string[] {
     return [...this.ctx.config.activeTools];
   }
 
   /**
-   * 绑定工具运行时（组装层在 Agent 构造后调用一次）：
-   * - resolve：组装层的完整工具宇宙（内置工具 + 扩展注册表），按名解析；
-   * - apply：把解析结果立即写入 running Agent 的 state.tools。
-   * invariant：Extension 只能经 ctx.setActiveTools 调用动作，永远不获得 Agent 实例。
+   * Bind the tool runtime (the assembly layer calls this once after constructing the Agent):
+   * - resolve: the assembly layer's full tool universe (built-in tools + extension registry), resolved by name;
+   * - apply: write the resolved tools to the running Agent's state.tools right away.
+   * invariant: an Extension can only call the action via ctx.setActiveTools and never gets the Agent instance.
    */
   bindToolRuntime(binding: ToolRuntimeBinding): void {
     this.toolBinding = binding;
   }
 
   /**
-   * Reconfigure 动作：切换活跃工具集（Pi setActiveToolsByName，agent-session.ts L950-972 教学版）。
-   * 1. 按名解析（有绑定时走组装层宇宙；无绑定时退回扩展注册表——纯配置场景，无 running Agent 可写）；
-   * 2. 未知名忽略；
-   * 3. 同步 config.activeTools（同数组引用原地更新，组装层/测试持有的 config 保持一致）；
-   * 4. 立即写 running agent.state.tools（下一次 provider call 可见）；
-   * 5. 不修改 Agent Loop。
+   * Reconfigure action: switch the active tool set (teaching version of Pi setActiveToolsByName, agent-session.ts L950-972).
+   * 1. Resolve by name (with a binding, use the assembly layer's universe; without one, fall back to the extension registry: a config-only case with no running Agent to write);
+   * 2. Ignore unknown names;
+   * 3. Sync config.activeTools (update the same array reference in place, so the config held by the assembly layer/tests stays consistent);
+   * 4. Write the running agent.state.tools right away (visible on the next provider call);
+   * 5. Don't modify the Agent Loop.
    */
   setActiveTools(toolNames: string[]): void {
     const resolve =
@@ -186,23 +186,23 @@ export class ExtensionRunner {
     this.toolBinding?.apply(tools);
   }
 
-  /** 全部注册工具（含未激活；loadTools 动态加载用）。 */
+  /** All registered tools (including inactive ones; used by loadTools for dynamic loading). */
   getRegisteredTools(): Tool[] {
     return wrapRegisteredTools(this.tools, this);
   }
 
-  /** 当前可见工具（注册即激活的教学简化 + config.activeTools 过滤）。 */
+  /** Currently visible tools (the teaching simplification where registered means active + filtered by config.activeTools). */
   getVisibleTools(): Tool[] {
     const active = new Set(this.ctx.config.activeTools);
     return wrapRegisteredTools(this.tools, this).filter((t) => active.has(t.name));
   }
 
-  /** 已注册命令。 */
+  /** Registered commands. */
   getCommands(): RegisteredCommand[] {
     return [...this.commands];
   }
 
-  /** 分发命令（用户输入 "name args" → 对应 handler）。 */
+  /** Dispatch a command (user input "name args" → the matching handler). */
   async runCommand(input: string, ctx?: ExtensionContext): Promise<void> {
     const [name, ...rest] = input.trim().split(/\s+/);
     const command = this.commands.find((c) => c.name === name);
@@ -212,8 +212,8 @@ export class ExtensionRunner {
     await command.handler(rest.join(" "), ctx ?? this.createContext());
   }
 
-  /** 工厂看到的 API：只暴露 on/registerTool/registerCommand（Pi createExtensionRuntime + bindCore 的最小版）。
-   *  注册先写进 pending（每工厂临时注册区），load 成功后统一并入 runner。 */
+  /** The API the factory sees: exposes only on/registerTool/registerCommand (a minimal version of Pi createExtensionRuntime + bindCore).
+   *  Registrations go into pending first (the per-factory staging registry) and are merged into the runner once load succeeds. */
   private createAPI(pending: PendingRegistrations) {
     return {
       on<K extends keyof ExtensionEvents>(event: K, handler: (event: ExtensionEvents[K], ctx: ExtensionContext) => unknown) {
