@@ -35,10 +35,10 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | 05 | chapters/05-steering-followup/** | merged | 4caec73 |
 | 06 | chapters/06-context-transform/** | merged | ea7d064 |
 | 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | merged | fbe8675 |
-| 08 | chapters/08-context-compaction/** | running | |
-| 09 | chapters/09-skills/** | running | |
+| 08 | chapters/08-context-compaction/** | interrupted (429) → resumed in worktree 99c28c05 | |
+| 09 | chapters/09-skills/** | merged | 0432fb0 |
 | 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | merged | 0e23ca5 |
-| 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | running | |
+| 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | interrupted (429) → resumed in worktree 876779aa | |
 | 12 | chapters/12-coding-agent/** | pending | |
 | root | README.en.md alignment + upstream credit (parent, Phase 4) | pending | |
 
@@ -46,7 +46,7 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 none
 
 ## Next action
-08, 09, 11 running; 12 after 11. Then consistency pass (e.g. `(none)` vs `(no reply)` demo fallback drift).
+02:3x rate limit (429) killed lanes 08 and 11 mid-way; their partial staged work is kept in their worktrees (pi-worktree-99c28c05… / 876779aa…). 03:00 resumed them in place. 12 after 11. Then consistency pass (e.g. `(none)` vs `(no reply)` demo fallback drift).
 
 ## Notes
 - Lanes must not run `npm ci`: worktree `node_modules` symlinks to the main checkout (it was wiped once and restored; after 01–03 + 07 the full suite is green, 211 tests).
