@@ -148,7 +148,7 @@ describe("agentLoop (01: Tool Calling, streaming interface)", () => {
       description: "Always fails",
       parameters: { type: "object", properties: {} },
       async execute() {
-        throw new Error("Bomb tool execution failed");
+        throw new Error("boom tool execution failed");
       },
     };
     const llm = new ScriptedLlm([toolStream("call_1", "boom", {}), textStream("Got the error")]);
@@ -161,6 +161,6 @@ describe("agentLoop (01: Tool Calling, streaming interface)", () => {
     });
 
     expect(messages[2]).toMatchObject({ role: "toolResult", toolName: "boom", isError: true });
-    expect(messages[2].text).toBe("Bomb tool execution failed");
+    expect(messages[2].text).toBe("boom tool execution failed");
   });
 });

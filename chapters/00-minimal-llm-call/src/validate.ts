@@ -2,7 +2,7 @@
  * Minimal JSON Schema validator.
  *
  * Maps to Pi's `validateToolArguments` (agent-loop.ts L618, from pi-ai, implemented with typebox).
- * The teaching version implements only the subset teaching needs: object type, per-field type checks, required checks.
+ * The teaching version implements only the subset this course needs: object type, per-field type checks, required checks.
  * From Chapter 04, tool argument validation joins the pipeline; this is a pure function so it can be tested on its own.
  */
 import type { Tool, ToolParameters } from "./types.ts";

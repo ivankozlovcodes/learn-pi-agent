@@ -14,7 +14,7 @@ async function main(): Promise<void> {
 
   const messages = await agentLoop({
     model,
-    systemPrompt: "You are a calculation assistant. Answer only with the provided tools, and keep answers concise.",
+    systemPrompt: "You are a calculator assistant. Answer only by using the provided tools, and keep answers concise.",
     messages: [{ role: "user", text: "What is 12 + 30?" }],
     tools: createDemoTools(),
     llm: new AnthropicLlmAdapter(),

@@ -173,7 +173,7 @@ function mapStopReason(reason: Anthropic.Message["stop_reason"]): { reason: Stop
   }
 }
 
-/** Parse failures degrade to an empty object: semantic argument validation belongs to the later Tool Runtime chapters; this chapter only recovers the provider decoding. */
+/** Parse failures degrade to an empty object: semantic argument validation belongs to the later Tool Runtime chapters; this chapter only provides a fallback for provider decoding. */
 function parseArgs(json: string): Record<string, unknown> {
   if (!json) return {};
   try {

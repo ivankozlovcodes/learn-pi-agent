@@ -52,7 +52,7 @@ export interface AssistantMessage extends Message {
   /**
    * Reasoning text (block-level, not streaming events).
    * Real endpoints return thinking blocks, and the Anthropic protocol requires sending them back as-is (otherwise 400).
-   * Teaching trim: no streaming thinking events, but the adapter keeps the text and sends it back.
+   * Trimmed for teaching: no streaming thinking events, but the adapter keeps the text and sends it back.
    */
   thinking?: string;
   /** Signature of the thinking block (the protocol requires sending it back with the text; required in the SDK type). */

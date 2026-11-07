@@ -181,7 +181,7 @@ tool_execution_update
 tool_execution_end
 ```
 
-`tool_execution_start` has an important timing: it happens before lookup.
+The timing of `tool_execution_start` matters: it happens before lookup.
 
 For example, the model requests a Tool that doesn't exist at all:
 

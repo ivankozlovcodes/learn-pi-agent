@@ -6,7 +6,7 @@
  *
  * Corresponds to the inner loop of Pi `runLoop` (agent-loop.ts L155-275). Trimmed for teaching:
  * - event model (AgentEvent) → Chapter 02
- * - termination ① error/aborted, newMessages semantics, truncation protection → Chapter 02
+ * - termination ① error/aborted, newMessages semantics, truncation guard → Chapter 02
  * - steering/follow-up, parallel, hooks → Chapters 06/05/04
  * - AbortSignal pass-through (the loop takes no signal) → Chapter 02
  *

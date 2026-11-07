@@ -401,4 +401,4 @@ await tool.execute(...)
 
 When arguments are validated, whether a call can be blocked before execution, and how a long-running Tool reports progress: these questions are still left inside.
 
-Chapter 03 continues from this problem.
+Chapter 03 picks up from this problem.

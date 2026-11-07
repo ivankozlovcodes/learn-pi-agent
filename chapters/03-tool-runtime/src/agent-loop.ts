@@ -4,7 +4,7 @@
  * Changes since Chapter 02 (all anchored to Pi):
  * - Tool execution goes from "find it and call it" to a five-step pipeline (see tool-runtime.ts)
  * - `tool_execution_start/update/end` events: completes the four-kind event model (L441-450/L767-775)
- * - **Batch Termination**: tool results carry a `terminate` hint, and the loop stops only when the **whole** batch terminates
+ * - **batch termination**: tool results carry a `terminate` hint, and the loop stops only when the **whole** batch terminates
  *   (Pi `shouldTerminateToolBatch` L582-584; semantics: terminate is "suggest stopping", not "order to stop")
  * - Hooks: `beforeToolCall` (L619-647) / `afterToolCall` (L724-751); hooks are boundaries (Philosophy 3)
  *
@@ -129,7 +129,7 @@ async function runLoop(
         hasMoreToolCalls = !shouldTerminateToolBatch(outcomes);
       }
     }
-    // Write back to history in one place (Pi L218-221): results from normal execution and truncation protection both go into context/newMessages
+    // Write back to history in one place (Pi L218-221): results from normal execution and the truncation guard both go into context/newMessages
     for (const result of toolResults) {
       context.messages.push(result);
       newMessages.push(result);
@@ -206,7 +206,7 @@ function shouldTerminateToolBatch(outcomes: ToolExecutionOutcome[]): boolean {
   return outcomes.length > 0 && outcomes.every((outcome) => outcome.terminate === true);
 }
 
-/** Error result for truncation protection (same as Chapter 02). */
+/** Error result for the truncation guard (same as Chapter 02). */
 async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Promise<Message> {
   // Pi L387-392: tool_execution_start carries the raw arguments
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
