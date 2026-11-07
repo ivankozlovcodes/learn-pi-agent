@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 06 章：Context Transformation（回合之间与请求之前的钩子）",
+  "description": "learn-pi-agent Chapter 06: Context Transformation (hooks between turns and before requests)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
