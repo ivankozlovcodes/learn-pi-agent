@@ -47,7 +47,7 @@ workspace
 
 There is no new Agent Loop.
 
-These capabilities keep going into the Runtime built earlier.
+These capabilities plug into the Runtime already built in earlier chapters.
 
 ## Assembling a Coding Agent
 
@@ -192,7 +192,7 @@ edit modifies source code
 
 It only handles Tool Calls and Tool Results.
 
-### `edit` puts the change in a definite place
+### `edit` puts the change at an exact location
 
 The model is good at judging:
 
@@ -271,7 +271,7 @@ whether this command may run
 
 that doesn't go into `bash.execute()`.
 
-The Chapter 11 Permission Extension can intercept before the Tool actually reaches the shell:
+The Chapter 11 Permission Extension can block before the Tool actually reaches the shell:
 
 ```text
 bash("rm -rf keep/")
@@ -340,7 +340,7 @@ model continues
 grep / read / edit / bash
 ```
 
-The Skill provides how this kind of task should be done.
+The Skill describes how this kind of task should be done.
 
 The actual execution stays with the existing Tools.
 
@@ -470,7 +470,7 @@ bash("npm test")
 
 The tests fail.
 
-The Bash Tool throws on the non-zero exit code as an execution failure, and the Tool Runtime turns it into:
+The Bash Tool treats a non-zero exit code as an execution failure and throws; the Tool Runtime turns it into:
 
 ```text
 ToolResult(isError = true)
