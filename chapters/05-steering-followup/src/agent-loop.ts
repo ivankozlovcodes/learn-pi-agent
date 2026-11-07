@@ -1,28 +1,28 @@
 /**
- * 05 章增量：Steering & Follow-up——双层循环（Two-phase Interaction）。
+ * Chapter 05 delta: Steering & Follow-up — the two-level loop (Two-phase Interaction).
  *
- * 相对 04 章的变化（全部锚定 Pi，runLoop L155-275）：
- * - **外层循环**（L170）：agent 本应停止后，若 follow-up 到达则继续
- * - **内层循环**（L174）：`while (hasMoreToolCalls || pendingMessages.length > 0)`——
- *   条件含 pending，steering 消息也能驱动内层继续
- * - **steering（运行中注入）**：三个取点
- *   初始（L167）、注入（L182-190：进历史 + 消息事件）、轮末重取（L259）
- * - **follow-up（停止后注入）**：一个取点（L263-268），内层退出后检查，非空则回外层
+ * Changes since Chapter 04 (all anchored to Pi, runLoop L155-275):
+ * - **Outer loop** (L170): after the agent would have stopped, continue if a follow-up arrives
+ * - **Inner loop** (L174): `while (hasMoreToolCalls || pendingMessages.length > 0)` —
+ *   the condition includes pending, so steering messages can also keep the inner loop going
+ * - **steering (injected during the run)**: three poll points
+ *   initial (L167), injection (L182-190: into history + message events), re-poll at turn end (L259)
+ * - **follow-up (injected after stopping)**: one poll point (L263-268), checked after the inner loop exits; if non-empty, go back to the outer loop
  *
- * 两种生命周期的区分（教学主线）：
- *   steering   = 当前工作流内的打断（回合之间插入，模型下一轮看到）
- *   follow-up  = 当前工作流结束后的新开始（完整回合之后，agent 本应停止时）
+ * The two lifecycles (main teaching thread):
+ *   steering   = an interruption within the current workflow (inserted between turns, seen by the model next turn)
+ *   follow-up  = a new start after the current workflow ends (after a complete turn, when the agent would have stopped)
  *
- * 剪裁（章节归属）：prepareNextTurn/shouldStopAfterTurn/transformContext/getApiKey→06。
+ * Trimmed for teaching (chapter ownership): prepareNextTurn/shouldStopAfterTurn/transformContext/getApiKey → 06.
  */
 import { EventStream, type LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AssistantMessage, AssistantMessageEvent, Message, ToolCall } from "../../00-minimal-llm-call/src/index.ts";
 import { emitToolResultMessage, executeAndFinalize, prepareToolCall, type FinalizedToolOutcome, type ToolResultMessage } from "./tool-runtime.ts";
 
-/** 事件输出（同前章）。 */
+/** Event output (same as the previous chapter). */
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
-/** 顶层入口：EventStream 封装（同前章）。 */
+/** Top-level entry: EventStream wrapper (same as the previous chapter). */
 export function agentLoop(
   prompts: Message[],
   context: AgentContext,
@@ -40,14 +40,14 @@ export function agentLoop(
       stream.end(messages);
     })
     .catch((error: unknown) => {
-      console.error("agent 运行失败:", error instanceof Error ? error.message : String(error));
+      console.error("agent run failed:", error instanceof Error ? error.message : String(error));
       stream.end([]);
     });
 
   return stream;
 }
 
-/** 启动一次 agent run（同前章）。 */
+/** Start one agent run (same as the previous chapter). */
 export async function runAgentLoop(
   prompts: Message[],
   context: AgentContext,
@@ -56,9 +56,9 @@ export async function runAgentLoop(
   emit: AgentEventSink,
   signal?: AbortSignal,
 ): Promise<Message[]> {
-  // 空 prompts 守卫——继续请用 runAgentLoopContinue（Pi L120-143），空数组会让 LLM 无提示续写或 400
+  // Empty prompts guard — use runAgentLoopContinue to continue (Pi L120-143); an empty array makes the LLM continue without a prompt or return 400
   if (prompts.length === 0) {
-    throw new Error("prompts 不能为空：继续已有会话请用 continue 语义（07 章 runAgentLoopContinue）");
+    throw new Error("prompts must not be empty: to continue an existing session, use continue semantics (Chapter 07 runAgentLoopContinue)");
   }
   const newMessages: Message[] = [...prompts];
   const currentContext: AgentContext = {
@@ -69,7 +69,7 @@ export async function runAgentLoop(
   await emit({ type: "agent_start" });
   await emit({ type: "turn_start" });
   for (const prompt of prompts) {
-    // message 事件 payload 统一浅拷贝（Pi 此处为原引用，教学 deliberate divergence）
+    // message event payloads are always shallow copies (Pi passes the original reference here; a deliberate divergence for teaching)
     await emit({ type: "message_start", message: { ...prompt } });
     await emit({ type: "message_end", message: { ...prompt } });
   }
@@ -79,8 +79,8 @@ export async function runAgentLoop(
 }
 
 /**
- * 主循环：双层结构（Pi L155-275）。
- * 外层（L170）：follow-up 生命周期。内层（L174）：回合 + 工具 + steering 注入。
+ * Main loop: two-level structure (Pi L155-275).
+ * Outer (L170): the follow-up lifecycle. Inner (L174): turns + tools + steering injection.
  */
 async function runLoop(
   context: AgentContext,
@@ -90,15 +90,15 @@ async function runLoop(
   emit: AgentEventSink,
   signal?: AbortSignal,
 ): Promise<void> {
-  // steering 初始取点（Pi L167：用户可能在你等待时输入）
+  // Initial steering poll (Pi L167: the user may have typed while you were waiting)
   let pendingMessages: Message[] = (await config.getSteeringMessages?.()) || [];
 
-  // 外层循环：Pi L170
-  let firstTurn = true;  // Pi L175-179：首轮 turn_start 由 runAgentLoop 发出
+  // Outer loop: Pi L170
+  let firstTurn = true;  // Pi L175-179: the first turn_start is emitted by runAgentLoop
   while (true) {
     let hasMoreToolCalls = true;
 
-    // 内层循环：Pi L174。pending 非空也能驱动继续（steering 注入后需要新一轮 LLM 调用）
+    // Inner loop: Pi L174. Non-empty pending also keeps it going (injected steering needs a new LLM call)
     while (hasMoreToolCalls || pendingMessages.length > 0) {
       if (firstTurn) {
         firstTurn = false;
@@ -106,8 +106,8 @@ async function runLoop(
         await emit({ type: "turn_start" });
       }
 
-      // 注入 steering 消息（Pi L182-190）：进历史 + 消息事件
-      // 事件 payload 浅拷贝（Pi 此处为原引用，教学 deliberate divergence）；内部历史保存原对象
+      // Inject steering messages (Pi L182-190): into history + message events
+      // Event payloads are shallow copies (Pi passes the original reference here; a deliberate divergence for teaching); the internal history keeps the original objects
       if (pendingMessages.length > 0) {
         for (const message of pendingMessages) {
           await emit({ type: "message_start", message: { ...message } });
@@ -136,18 +136,18 @@ async function runLoop(
           for (const toolCall of toolCalls) {
             toolResults.push(await truncatedToolResult(toolCall, emit));
           }
-          // Pi L216：截断批 terminate=false → 继续循环，模型基于错误结果重发完整参数
+          // Pi L216: a truncated batch has terminate=false → keep looping; the model re-sends complete arguments based on the error results
           hasMoreToolCalls = true;
         } else {
-          // 工具执行沿用 04 章分流（默认并行）
+          // Tool execution keeps the Chapter 04 dispatch (parallel by default)
           const executed = await executeToolCalls(context, assistantMessage, toolCalls, config, emit, signal);
           for (const result of executed) {
-            toolResults.push(result.message);  // Pi L216-221：工具结果进入 toolResults（统一写入 + turn_end 携带）
+            toolResults.push(result.message);  // Pi L216-221: tool results go into toolResults (written back in one place + carried by turn_end)
           }
           hasMoreToolCalls = !shouldTerminateToolBatch(executed);
         }
       }
-      // 统一写入历史（Pi L218-221）：正常执行与截断保护的结果都进 context/newMessages
+      // Write back to history in one place (Pi L218-221): results from normal execution and the truncation guard both go into context/newMessages
       for (const result of toolResults) {
         context.messages.push(result);
         newMessages.push(result);
@@ -155,14 +155,14 @@ async function runLoop(
 
       await emit({ type: "turn_end", message: assistantMessage, toolResults });
 
-      // steering 轮末重取（Pi L259）
+      // Re-poll steering at turn end (Pi L259)
       pendingMessages = (await config.getSteeringMessages?.()) || [];
     }
 
-    // 内层退出：agent 本应停止。检查 follow-up（Pi L263-268）
+    // Inner loop exited: the agent would stop here. Check follow-up (Pi L263-268)
     const followUpMessages = (await config.getFollowUpMessages?.()) || [];
     if (followUpMessages.length > 0) {
-      // 设为 pending，回到外层继续（L266-267）
+      // Set as pending and continue in the outer loop (L266-267)
       pendingMessages = followUpMessages;
       continue;
     }
@@ -173,7 +173,7 @@ async function runLoop(
   await emit({ type: "agent_end", messages: newMessages });
 }
 
-/** 工具批次执行：分流（同 04 章，Pi L411-426）。 */
+/** Tool batch execution: dispatch (same as Chapter 04, Pi L411-426). */
 async function executeToolCalls(
   context: AgentContext,
   assistantMessage: AssistantMessage,
@@ -191,7 +191,7 @@ async function executeToolCalls(
   return executeToolCallsParallel(context, assistantMessage, toolCalls, config, emit, signal);
 }
 
-/** 串行路径（同 04 章，Pi L433-487）。 */
+/** Sequential path (same as Chapter 04, Pi L433-487). */
 async function executeToolCallsSequential(
   context: AgentContext,
   assistantMessage: AssistantMessage,
@@ -204,7 +204,7 @@ async function executeToolCallsSequential(
   for (const toolCall of toolCalls) {
     const prepared = await prepareToolCall(context, assistantMessage, toolCall, config, emit, signal);
     if (prepared.kind === "immediate") {
-      // Pi 串行 L472-474：end 已由 immediate 发，消息事件随执行顺序立即发
+      // Pi sequential L472-474: end was already emitted by immediate; message events are emitted right away, in execution order
       await emit({ type: "message_start", message: { ...prepared.message } });
       await emit({ type: "message_end", message: { ...prepared.message } });
       results.push({ message: prepared.message, terminate: prepared.terminate });
@@ -212,7 +212,7 @@ async function executeToolCallsSequential(
       const finalized = await executeAndFinalize(prepared, config, emit, context, assistantMessage, signal);
       results.push(await emitToolResultMessage(finalized, emit));
     }
-    // Pi L478-480：abort 后 break，不再执行剩余工具
+    // Pi L478-480: break after abort; the remaining tools are not executed
     if (signal?.aborted) {
       break;
     }
@@ -220,7 +220,7 @@ async function executeToolCallsSequential(
   return results;
 }
 
-/** 并行路径（同 04 章，Pi L489-554）。 */
+/** Parallel path (same as Chapter 04, Pi L489-554). */
 async function executeToolCallsParallel(
   context: AgentContext,
   assistantMessage: AssistantMessage,
@@ -237,7 +237,7 @@ async function executeToolCallsParallel(
     } else {
       entries.push(() => executeAndFinalize(prepared, config, emit, context, assistantMessage, signal));
     }
-    // Pi L516-518/L535-537：abort 后 break，不再 prepare 剩余工具
+    // Pi L516-518/L535-537: break after abort; the remaining tools are not prepared
     if (signal?.aborted) {
       break;
     }
@@ -251,7 +251,7 @@ async function executeToolCallsParallel(
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (typeof entry !== "function") {
-      // immediate：消息事件按源序在收尾统一发（Pi L543-548，与正常结果同序）
+      // immediate: message events are emitted together at the end, in source order (Pi L543-548, same order as normal results)
       await emit({ type: "message_start", message: { ...entry.message } });
       await emit({ type: "message_end", message: { ...entry.message } });
       results.push({ message: entry.message, terminate: entry.terminate });
@@ -262,12 +262,12 @@ async function executeToolCallsParallel(
   return results;
 }
 
-/** 批终止判定（同前章，Pi L582-584）。 */
+/** Batch termination check (same as the previous chapter, Pi L582-584). */
 function shouldTerminateToolBatch(results: ToolResultMessage[]): boolean {
   return results.length > 0 && results.every((r) => r.terminate === true);
 }
 
-/** 流式 assistant 响应（同前章，Pi L281-372）。 */
+/** Streaming assistant response (same as the previous chapter, Pi L281-372). */
 async function streamAssistantResponse(
   context: AgentContext,
   config: AgentLoopConfig,
@@ -314,19 +314,19 @@ async function streamAssistantResponse(
           context.messages.push(finalMessage);
           await emit({ type: "message_start", message: { ...finalMessage } });
         }
-        // message_end 同样快照（Pi 此处为原引用，教学 deliberate divergence）
+        // message_end is a snapshot too (Pi passes the original reference here; a deliberate divergence for teaching)
         await emit({ type: "message_end", message: { ...finalMessage } });
         return finalMessage;
       }
     }
   }
 
-  throw new Error("LLM 流未以 done 事件结束");
+  throw new Error("LLM stream did not end with a done event");
 }
 
-/** 截断保护的错误结果（同前章）。 */
+/** Error result for the truncation guard (same as the previous chapter). */
 async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Promise<Message> {
-  // Pi L387-392：tool_execution_start 携带原始参数
+  // Pi L387-392: tool_execution_start carries the raw arguments
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
   const message: Message = {
     role: "toolResult",
@@ -335,7 +335,7 @@ async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Pr
     text: `Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`,
     isError: true,
   };
-  // Pi L400-403：tool_execution_end + 消息事件（浅拷贝，消费者改动不污染内部历史）
+  // Pi L400-403: tool_execution_end + message events (shallow copies, so consumer changes don't pollute the internal history)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result: { content: message.text ?? "" }, isError: true });
   await emit({ type: "message_start", message: { ...message } });
   await emit({ type: "message_end", message: { ...message } });

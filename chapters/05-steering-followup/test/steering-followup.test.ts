@@ -1,7 +1,7 @@
 /**
- * 05 章测试：Steering & Follow-up——双层循环、两种生命周期的注入时机、
- * steering 三取点、follow-up 单取点、组合流程与回归。
- * 流式 mock LLM 驱动（离线）。
+ * Chapter 05 tests: Steering & Follow-up — the two-level loop, injection timing for the two lifecycles,
+ * the three steering poll points, the single follow-up poll point, the combined flow, and regressions.
+ * Driven by a streaming mock LLM (offline).
  */
 import { describe, expect, it } from "vitest";
 import { runAgentLoop, type AgentEventSink } from "../src/agent-loop.ts";
@@ -16,7 +16,7 @@ import type {
 } from "../../00-minimal-llm-call/src/index.ts";
 import { createCalculatorTool, createEchoTool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 流式 mock LLM：记录每次调用收到的历史（验证 steering/follow-up 进入历史）。 */
+/** Streaming mock LLM: records the history received on each call (to verify steering/follow-up enter history). */
 class ScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -72,48 +72,48 @@ const echo = createEchoTool();
 const calculator = createCalculatorTool();
 
 function baseContext(): AgentContext {
-  return { systemPrompt: "助手", messages: [], tools: [echo, calculator] };
+  return { systemPrompt: "Assistant", messages: [], tools: [echo, calculator] };
 }
 
-/** 记录注入消息进入历史的时序（以 LLM 调用为锚点）。 */
+/** Records when injected messages enter history (anchored on LLM calls). */
 function textsAt(llm: ScriptedLlm, callIndex: number): string[] {
   return llm.seenHistories[callIndex]?.filter((m) => m.role === "user").map((m) => m.text ?? "") ?? [];
 }
 
-describe("Steering & Follow-up（05 章）", () => {
-  it("steering turn-end 取点：回合完整结束后进入下一回合，模型下一轮看到（L259）", async () => {
+describe("Steering & Follow-up (Chapter 05)", () => {
+  it("steering turn-end poll: enters the next turn after a complete turn, and the model sees it next turn (L259)", async () => {
     let steeringCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
-      // 初始取点（L167）返回空；轮末取点（L259）返回 steering——区分两种取点（见下一条测试）
+      // The initial poll (L167) returns empty; the turn-end poll (L259) returns steering — distinguishes the two poll points (see the next test)
       getSteeringMessages: async () => {
         steeringCalls++;
-        return steeringCalls === 2 ? [{ role: "user", text: "中途消息" }] : [];
+        return steeringCalls === 2 ? [{ role: "user", text: "mid-run message" }] : [];
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("完成")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("done")]);
     const recorder = new EventRecorder();
-    const messages = await runAgentLoop([{ role: "user", text: "算" }], baseContext(), config, llm, recorder.sink);
+    const messages = await runAgentLoop([{ role: "user", text: "calculate" }], baseContext(), config, llm, recorder.sink);
 
-    // 第一轮 LLM 调用（回合 1）尚未包含 steering
-    expect(textsAt(llm, 0)).toEqual(["算"]);
-    // 第二轮 LLM 调用时历史里已有 steering（注入在回合之间，L182-190）
-    expect(textsAt(llm, 1)).toContain("中途消息");
-    // steering 消息进入 newMessages
-    expect(messages.some((m) => m.text === "中途消息")).toBe(true);
-    // steering 消息有消息事件
+    // The first LLM call (turn 1) does not include steering yet
+    expect(textsAt(llm, 0)).toEqual(["calculate"]);
+    // By the second LLM call, history already has steering (injected between turns, L182-190)
+    expect(textsAt(llm, 1)).toContain("mid-run message");
+    // The steering message goes into newMessages
+    expect(messages.some((m) => m.text === "mid-run message")).toBe(true);
+    // The steering message has message events
     const startEvents = recorder.events.filter((e) => e.type === "message_start");
-    expect(startEvents.some((e) => e.type === "message_start" && e.message.text === "中途消息")).toBe(true);
+    expect(startEvents.some((e) => e.type === "message_start" && e.message.text === "mid-run message")).toBe(true);
 
-    // 事件相对顺序（README 关键事实）：
-    // toolResult 消息事件 → turn_end → 下一 turn_start → steering 消息事件 → 下一 assistant 消息事件
+    // Relative event order (a key fact in the README):
+    // toolResult message events → turn_end → next turn_start → steering message events → next assistant message events
     const toolResultMsg = recorder.events.findIndex(
       (e) => e.type === "message_start" && e.message.role === "toolResult",
     );
     const firstTurnEnd = recorder.events.findIndex((e) => e.type === "turn_end");
     const secondTurnStart = recorder.events.findIndex((e, i) => e.type === "turn_start" && i > toolResultMsg);
     const steeringMsg = recorder.events.findIndex(
-      (e) => e.type === "message_start" && e.message.text === "中途消息",
+      (e) => e.type === "message_start" && e.message.text === "mid-run message",
     );
     const assistantStarts = recorder.events
       .map((e, i) => (e.type === "message_start" && e.message.role === "assistant" ? i : -1))
@@ -123,94 +123,94 @@ describe("Steering & Follow-up（05 章）", () => {
     expect(firstTurnEnd).toBeLessThan(secondTurnStart);
     expect(secondTurnStart).toBeLessThan(steeringMsg);
     expect(steeringMsg).toBeLessThan(secondAssistantMsg);
-    // steering 轮询共三次：初始（空）+ 回合 1 轮末（返回消息）+ 回合 2 轮末（空，内层退出）
+    // steering is polled three times: initial (empty) + end of turn 1 (returns a message) + end of turn 2 (empty, inner loop exits)
     expect(steeringCalls).toBe(3);
   });
 
-  it("steering 时机：初始取点返回的消息在第一次 LLM 调用前进入历史（L167）", async () => {
+  it("steering timing: messages returned by the initial poll enter history before the first LLM call (L167)", async () => {
     let steeringCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
-      // 有界：只返回一次。契约：无消息时必须返回 []（Pi types.ts L242-243），否则内层循环不停
+      // Bounded: returns only once. Contract: must return [] when there are no messages (Pi types.ts L242-243), or the inner loop never stops
       getSteeringMessages: async () => {
         steeringCalls++;
-        return steeringCalls === 1 ? [{ role: "user", text: "预热消息" }] : [];
+        return steeringCalls === 1 ? [{ role: "user", text: "warm-up message" }] : [];
       },
     };
-    const llm = new ScriptedLlm([textStream("完成")]);
-    await runAgentLoop([{ role: "user", text: "算" }], baseContext(), config, llm, () => {});
+    const llm = new ScriptedLlm([textStream("done")]);
+    await runAgentLoop([{ role: "user", text: "calculate" }], baseContext(), config, llm, () => {});
 
-    // 第一次 LLM 调用已包含初始 steering
-    expect(textsAt(llm, 0)).toEqual(["算", "预热消息"]);
+    // The first LLM call already includes the initial steering
+    expect(textsAt(llm, 0)).toEqual(["calculate", "warm-up message"]);
   });
 
-  it("follow-up：内层退出后注入 → 外层继续 → 新回合（L263-268）", async () => {
+  it("follow-up: injected after the inner loop exits → outer loop continues → new turn (L263-268)", async () => {
     let followUpCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
       getFollowUpMessages: async () => {
         followUpCalls++;
-        return followUpCalls === 1 ? [{ role: "user", text: "退出后新任务" }] : [];
+        return followUpCalls === 1 ? [{ role: "user", text: "new task after exit" }] : [];
       },
     };
-    const llm = new ScriptedLlm([textStream("第一轮完成"), textStream("第二轮完成")]);
+    const llm = new ScriptedLlm([textStream("first turn done"), textStream("second turn done")]);
     const recorder = new EventRecorder();
-    const messages = await runAgentLoop([{ role: "user", text: "任务一" }], baseContext(), config, llm, recorder.sink);
+    const messages = await runAgentLoop([{ role: "user", text: "task one" }], baseContext(), config, llm, recorder.sink);
 
     expect(llm.callCount).toBe(2);
-    expect(textsAt(llm, 1)).toContain("退出后新任务");
-    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "第二轮完成" });
-    // agent_end 只在最后
+    expect(textsAt(llm, 1)).toContain("new task after exit");
+    expect(messages.at(-1)).toMatchObject({ role: "assistant", text: "second turn done" });
+    // agent_end only at the very end
     expect(recorder.types.filter((t) => t === "agent_end")).toHaveLength(1);
   });
 
-  it("follow-up 为空时：内层退出即结束（回归，行为等同 04 章）", async () => {
-    const llm = new ScriptedLlm([textStream("完成")]);
+  it("empty follow-up: the run ends when the inner loop exits (regression, same behavior as Chapter 04)", async () => {
+    const llm = new ScriptedLlm([textStream("done")]);
     const recorder = new EventRecorder();
-    await runAgentLoop([{ role: "user", text: "算" }], baseContext(), { model: "m" }, llm, recorder.sink);
+    await runAgentLoop([{ role: "user", text: "calculate" }], baseContext(), { model: "m" }, llm, recorder.sink);
 
     expect(llm.callCount).toBe(1);
     expect(recorder.types.at(-1)).toBe("agent_end");
   });
 
-  it("组合流程：steering（回合间）+ 工具执行 + follow-up（退出后）全链路", async () => {
+  it("combined flow: steering (between turns) + tool execution + follow-up (after exit), end to end", async () => {
     let steeringCalls = 0;
     let followUpCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
       getSteeringMessages: async () => {
         steeringCalls++;
-        return steeringCalls === 1 ? [{ role: "user", text: "改主意了，算 10*10" }] : [];
+        return steeringCalls === 1 ? [{ role: "user", text: "changed my mind, calculate 10*10" }] : [];
       },
       getFollowUpMessages: async () => {
         followUpCalls++;
-        return followUpCalls === 1 ? [{ role: "user", text: "再回显 hello" }] : [];
+        return followUpCalls === 1 ? [{ role: "user", text: "also echo hello" }] : [];
       },
     };
     const llm = new ScriptedLlm([
-      toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), // 第 1 轮：原任务
-      textStream("100"),                                                    // 第 2 轮：看到 steering 后
-      textStream("已回显 hello"),                                           // 第 3 轮：follow-up
+      toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), // turn 1: original task
+      textStream("100"),                                                    // turn 2: after seeing steering
+      textStream("echoed hello"),                                           // turn 3: follow-up
     ]);
-    const messages = await runAgentLoop([{ role: "user", text: "算 1+2" }], baseContext(), config, llm, () => {});
+    const messages = await runAgentLoop([{ role: "user", text: "calculate 1+2" }], baseContext(), config, llm, () => {});
 
     expect(llm.callCount).toBe(3);
-    // 历史顺序：原任务 → 工具结果 → steering → 第二回复 → follow-up → 第三回复
+    // History order: original task → tool result → steering → second reply → follow-up → third reply
     const userTexts = messages.filter((m) => m.role === "user").map((m) => m.text);
-    expect(userTexts).toEqual(["算 1+2", "改主意了，算 10*10", "再回显 hello"]);
-    // 第二轮 LLM 调用时历史包含工具结果与 steering（历史累积正确）
+    expect(userTexts).toEqual(["calculate 1+2", "changed my mind, calculate 10*10", "also echo hello"]);
+    // The second LLM call's history includes the tool result and steering (history accumulates correctly)
     const secondHistory = llm.seenHistories[1];
     expect(secondHistory.some((m) => m.role === "toolResult" && m.text === "3")).toBe(true);
-    expect(secondHistory.some((m) => m.role === "user" && m.text === "改主意了，算 10*10")).toBe(true);
+    expect(secondHistory.some((m) => m.role === "user" && m.text === "changed my mind, calculate 10*10")).toBe(true);
   });
 
-  it("注入位置：steering 的消息事件在 turn 之间，follow-up 在 agent_end 之前", async () => {
+  it("injection position: steering message events are between turns, follow-up comes before agent_end", async () => {
     let steeringCalls = 0;
     let followUpCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
-      // steering：第 1 次（初始取点 L167）返回空，第 2 次（轮末重取 L259）返回 S
-      // → S 出现在第一个回合结束后、第二个回合开始时（回合之间）
+      // steering: poll 1 (initial poll L167) returns empty, poll 2 (turn-end re-poll L259) returns S
+      // → S appears after the first turn ends, at the start of the second turn (between turns)
       getSteeringMessages: async () => {
         steeringCalls++;
         return steeringCalls === 2 ? [{ role: "user", text: "S" }] : [];
@@ -222,52 +222,52 @@ describe("Steering & Follow-up（05 章）", () => {
     };
     const llm = new ScriptedLlm([textStream("A"), textStream("B")]);
     const recorder = new EventRecorder();
-    await runAgentLoop([{ role: "user", text: "任务" }], baseContext(), config, llm, recorder.sink);
+    await runAgentLoop([{ role: "user", text: "task" }], baseContext(), config, llm, recorder.sink);
 
-    // steering S 的消息事件：发生在第一个 turn_end 之后（回合之间）
+    // Message events for steering S: after the first turn_end (between turns)
     const sIdx = recorder.types.findIndex((t, i) => t === "message_start" && recorder.events[i].type === "message_start" && recorder.events[i].message.text === "S");
     const firstTurnEnd = recorder.types.indexOf("turn_end");
     expect(sIdx).toBeGreaterThan(firstTurnEnd);
-    // follow-up F 的消息事件：在 S 之后、agent_end 之前；
-    // 它在被注入的那个回合的开头进入（L182-190），而不是独立出现在 agent_end 前
+    // Message events for follow-up F: after S and before agent_end;
+    // it enters at the start of the turn it is injected into (L182-190), not on its own just before agent_end
     const fIdx = recorder.types.findIndex((t, i) => t === "message_start" && recorder.events[i].type === "message_start" && recorder.events[i].message.text === "F");
     const agentEnd = recorder.types.lastIndexOf("agent_end");
     expect(fIdx).toBeGreaterThan(sIdx);
     expect(fIdx).toBeLessThan(agentEnd);
-    expect(llm.callCount).toBe(3); // 原任务 → steering 后 → follow-up 后
+    expect(llm.callCount).toBe(3); // original task → after steering → after follow-up
   });
 
-  it("copy policy：消费者修改 steering 的 message_end payload 不污染内部历史", async () => {
+  it("copy policy: a consumer mutating the steering message_end payload does not pollute the internal history", async () => {
     let steeringCalls = 0;
     const config: AgentLoopConfig = {
       model: "m",
       getSteeringMessages: async () => {
         steeringCalls++;
-        return steeringCalls === 2 ? [{ role: "user", text: "中途消息" }] : [];
+        return steeringCalls === 2 ? [{ role: "user", text: "mid-run message" }] : [];
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("完成")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("done")]);
     let mutated = false;
-    // 消费者收到 message_end 后篡改事件 payload（payload 是浅拷贝快照）
+    // The consumer tampers with the event payload after receiving message_end (the payload is a shallow-copy snapshot)
     const sink: AgentEventSink = (event) => {
-      if (event.type === "message_end" && event.message.role === "user" && event.message.text === "中途消息") {
+      if (event.type === "message_end" && event.message.role === "user" && event.message.text === "mid-run message") {
         event.message.text = "MUTATED";
         mutated = true;
       }
     };
-    const messages = await runAgentLoop([{ role: "user", text: "算" }], baseContext(), config, llm, sink);
+    const messages = await runAgentLoop([{ role: "user", text: "calculate" }], baseContext(), config, llm, sink);
 
-    // 篡改确实发生在事件侧
+    // The tampering really happened on the event side
     expect(mutated).toBe(true);
-    // 内部历史（下一轮 LLM input）未被污染
-    expect(textsAt(llm, 1)).toContain("中途消息");
+    // The internal history (next LLM input) is not polluted
+    expect(textsAt(llm, 1)).toContain("mid-run message");
     expect(textsAt(llm, 1)).not.toContain("MUTATED");
-    // 返回的 newMessages 未被污染
-    expect(messages.some((m) => m.text === "中途消息")).toBe(true);
+    // The returned newMessages is not polluted
+    expect(messages.some((m) => m.text === "mid-run message")).toBe(true);
     expect(messages.some((m) => m.text === "MUTATED")).toBe(false);
   });
 
-  it("单次取点返回多条：数组顺序保持、逐条消息事件（steering + follow-up）", async () => {
+  it("one poll returning several messages: array order is kept, one set of message events per message (steering + follow-up)", async () => {
     let steeringCalls = 0;
     let followUpCalls = 0;
     const config: AgentLoopConfig = {
@@ -287,12 +287,12 @@ describe("Steering & Follow-up（05 章）", () => {
     };
     const llm = new ScriptedLlm([textStream("A"), textStream("B"), textStream("C")]);
     const recorder = new EventRecorder();
-    const messages = await runAgentLoop([{ role: "user", text: "任务" }], baseContext(), config, llm, recorder.sink);
+    const messages = await runAgentLoop([{ role: "user", text: "task" }], baseContext(), config, llm, recorder.sink);
 
-    // 同一次数组内顺序保持：下一次 LLM input 按同序看到（S1→S2、F1→F2）
-    expect(textsAt(llm, 1)).toEqual(["任务", "S1", "S2"]);
-    expect(textsAt(llm, 2)).toEqual(["任务", "S1", "S2", "F1", "F2"]);
-    // 每条消息分别产生 message_start / message_end，不合并成一条
+    // Order within one array is kept: the next LLM input sees them in the same order (S1→S2, F1→F2)
+    expect(textsAt(llm, 1)).toEqual(["task", "S1", "S2"]);
+    expect(textsAt(llm, 2)).toEqual(["task", "S1", "S2", "F1", "F2"]);
+    // Each message produces its own message_start / message_end; they are not merged into one
     const dynTexts = ["S1", "S2", "F1", "F2"];
     const startTexts = recorder.events.flatMap((e) =>
       e.type === "message_start" && e.message.role === "user" && dynTexts.includes(e.message.text ?? "")
@@ -306,7 +306,7 @@ describe("Steering & Follow-up（05 章）", () => {
     );
     expect(startTexts).toEqual(["S1", "S2", "F1", "F2"]);
     expect(endTexts).toEqual(["S1", "S2", "F1", "F2"]);
-    // newMessages 最终顺序：initial → S1 → S2 → F1 → F2
-    expect(messages.filter((m) => m.role === "user").map((m) => m.text)).toEqual(["任务", "S1", "S2", "F1", "F2"]);
+    // Final newMessages order: initial → S1 → S2 → F1 → F2
+    expect(messages.filter((m) => m.role === "user").map((m) => m.text)).toEqual(["task", "S1", "S2", "F1", "F2"]);
   });
 });
