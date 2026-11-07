@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 00 章：Minimal LLM Loop（共享基座：类型/适配器/EventStream/工具）",
+  "description": "learn-pi-agent Chapter 00: Minimal LLM Loop (shared base: types/adapters/EventStream/tools)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",

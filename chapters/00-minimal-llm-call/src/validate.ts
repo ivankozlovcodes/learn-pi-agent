@@ -1,40 +1,40 @@
 /**
- * 极简 JSON Schema 校验器。
+ * Minimal JSON Schema validator.
  *
- * 对应 Pi 的 `validateToolArguments`（agent-loop.ts L618，来自 pi-ai，typebox 实现）。
- * 教学版只实现教学需要的子集：对象类型、字段 type 检查、required 检查。
- * 04 章起工具参数校验进入流水线；这里提供纯函数，便于独立测试。
+ * Maps to Pi's `validateToolArguments` (agent-loop.ts L618, from pi-ai, implemented with typebox).
+ * The teaching version implements only the subset teaching needs: object type, per-field type checks, required checks.
+ * From Chapter 04, tool argument validation joins the pipeline; this is a pure function so it can be tested on its own.
  */
 import type { Tool, ToolParameters } from "./types.ts";
 
 export type ValidationResult = { ok: true } | { ok: false; error: string };
 
-/** 校验工具参数是否符合 schema（Pi `validateToolArguments`，agent-loop.ts L618）。 */
+/** Validates tool arguments against the schema (Pi `validateToolArguments`, agent-loop.ts L618). */
 export function validateToolArguments(tool: Tool, args: unknown): ValidationResult {
   return validateObject(tool.parameters, args);
 }
 
-/** 校验一个 object schema（递归到字段级）。 */
+/** Validates one object schema (recursing down to the field level). */
 function validateObject(schema: ToolParameters, value: unknown): ValidationResult {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { ok: false, error: `参数必须是 object，实际是 ${describe(value)}` };
+    return { ok: false, error: `Arguments must be an object, got ${describe(value)}` };
   }
 
   const record = value as Record<string, unknown>;
 
-  // required 检查（Pi 契约：缺少必填字段直接拒绝）
+  // required check (Pi contract: a missing required field is rejected outright)
   for (const key of schema.required ?? []) {
     if (!(key in record)) {
-      return { ok: false, error: `缺少必填参数: ${key}` };
+      return { ok: false, error: `Missing required argument: ${key}` };
     }
   }
 
-  // 字段级 type 检查
+  // Field-level type check
   for (const [key, prop] of Object.entries(schema.properties)) {
     if (key in record) {
       const check = checkType(prop.type, record[key]);
       if (!check.ok) {
-        return { ok: false, error: `参数 ${key} ${check.error}` };
+        return { ok: false, error: `Argument ${key} ${check.error}` };
       }
     }
   }
@@ -42,7 +42,7 @@ function validateObject(schema: ToolParameters, value: unknown): ValidationResul
   return { ok: true };
 }
 
-/** 单个字段的 type 检查。 */
+/** Type check for a single field. */
 function checkType(type: string, value: unknown): ValidationResult {
   const match = {
     string: typeof value === "string",
@@ -54,7 +54,7 @@ function checkType(type: string, value: unknown): ValidationResult {
   }[type];
 
   if (!match) {
-    return { ok: false, error: `类型应为 ${type}，实际是 ${describe(value)}` };
+    return { ok: false, error: `should be of type ${type}, got ${describe(value)}` };
   }
   return { ok: true };
 }

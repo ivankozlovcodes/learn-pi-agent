@@ -1,16 +1,16 @@
 /**
- * 00 章共享基座：演示工具集（echo + calculator），供全部章节复用。
- * Pi 锚点：工具即 `context.tools` 数组（types.ts L418），查找在 `prepareToolCall` L607。
+ * Chapter 00 shared base: demo tool set (echo + calculator), reused by every chapter.
+ * Pi anchor: tools are the `context.tools` array (types.ts L418); lookup is in `prepareToolCall` L607.
  */
 import type { Tool } from "./types.ts";
 
 export function createEchoTool(): Tool<{ text: string }> {
   return {
     name: "echo",
-    description: "原样返回你传入的 text 字段",
+    description: "Returns the text field you pass in, unchanged",
     parameters: {
       type: "object",
-      properties: { text: { type: "string", description: "要回显的文本" } },
+      properties: { text: { type: "string", description: "Text to echo back" } },
       required: ["text"],
     },
     async execute({ text }) {
@@ -22,12 +22,12 @@ export function createEchoTool(): Tool<{ text: string }> {
 export function createCalculatorTool(): Tool<{ a: number; b: number }> {
   return {
     name: "calculator",
-    description: "计算两个数的和 a + b",
+    description: "Computes the sum of two numbers, a + b",
     parameters: {
       type: "object",
       properties: {
-        a: { type: "number", description: "第一个加数" },
-        b: { type: "number", description: "第二个加数" },
+        a: { type: "number", description: "First addend" },
+        b: { type: "number", description: "Second addend" },
       },
       required: ["a", "b"],
     },

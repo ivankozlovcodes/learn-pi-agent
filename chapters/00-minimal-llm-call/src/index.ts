@@ -1,5 +1,5 @@
 /**
- * 00 章共享基座导出：后续章节统一从这里 import 类型/适配器/EventStream/工具。
+ * Chapter 00 shared base exports: later chapters import types/adapters/EventStream/tools from here.
  */
 export * from "./types.ts";
 export * from "./llm.ts";

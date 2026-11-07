@@ -109,7 +109,7 @@ describe("Tool Runtime（03 章）", () => {
     const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "echo", args: {} }]), textStream("缺参数")]);
     const messages = await runAgentLoop([{ role: "user", text: "hi" }], baseContext(), { model: "m" }, llm, () => {});
 
-    expect(messages.find((m) => m.role === "toolResult")?.text).toContain("缺少必填参数");
+    expect(messages.find((m) => m.role === "toolResult")?.text).toContain("Missing required argument");
   });
 
   it("beforeToolCall 钩子：block → 错误结果，工具未执行", async () => {

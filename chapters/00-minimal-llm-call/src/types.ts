@@ -1,26 +1,26 @@
 /**
- * 00 章共享基座：完整类型定义（一次到位，后续章节只做实现演进，不再改类型）。
+ * Chapter 00 shared base: the complete type definitions (done once; later chapters only evolve the implementation and never change the types).
  *
- * 对应 Pi 的 `packages/agent/src/types.ts` 与 pi-ai 基础类型：
- * - `Message`/`Tool`/`AgentContext`：Pi `AgentMessage`（types.ts L325）/`AgentTool`（L386-409）/`AgentContext`（L412-419）的简化
- * - `errorMessage`：Pi 错误消息文本字段（pi-ai L439）
- * - `StopReason`：教学五值（Pi 七值含 pending/deferred，教学裁剪）
- * - `AssistantMessageEvent`：Pi 流事件（pi-ai L535-556）简化（toolcall_delta/thinking/error 独立事件未复刻）
- * - `AgentEvent`：Pi `AgentEvent`（types.ts L428-443）子集（message_update 含流式事件引用）
- * - `AgentLoopConfig`：Pi `AgentLoopConfig`（types.ts L149-293）的 V0 子集——后续章节按需扩展此接口
+ * Maps to Pi's `packages/agent/src/types.ts` and the pi-ai base types:
+ * - `Message`/`Tool`/`AgentContext`: simplified Pi `AgentMessage` (types.ts L325) / `AgentTool` (L386-409) / `AgentContext` (L412-419)
+ * - `errorMessage`: Pi's error message text field (pi-ai L439)
+ * - `StopReason`: five teaching values (Pi has seven, including pending/deferred; trimmed for teaching)
+ * - `AssistantMessageEvent`: simplified Pi stream events (pi-ai L535-556) (separate toolcall_delta/thinking/error events not reproduced)
+ * - `AgentEvent`: subset of Pi `AgentEvent` (types.ts L428-443) (message_update carries a reference to the streaming event)
+ * - `AgentLoopConfig`: V0 subset of Pi `AgentLoopConfig` (types.ts L149-293). Later chapters extend this interface as needed
  */
 
-/** 消息角色：与 Pi 的基础 `Message` 三角色一致。 */
+/** Message role: matches the three roles of Pi's base `Message`. */
 export type MessageRole = "user" | "assistant" | "toolResult";
 
-/** 模型请求的工具调用块：对应 Pi 的 `AgentToolCall`（types.ts L53）。 */
+/** Tool call block requested by the model: maps to Pi's `AgentToolCall` (types.ts L53). */
 export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
 }
 
-/** 统一消息模型：对应 Pi 的 `AgentMessage`（types.ts L325）。 */
+/** Unified message model: maps to Pi's `AgentMessage` (types.ts L325). */
 export interface Message {
   role: MessageRole;
   text?: string;
@@ -28,45 +28,45 @@ export interface Message {
   toolCallId?: string;
   toolName?: string;
   isError?: boolean;
-  /** 错误文本：`stopReason === "error"` 时携带（Pi pi-ai types.ts L439）。 */
+  /** Error text: carried when `stopReason === "error"` (Pi pi-ai types.ts L439). */
   errorMessage?: string;
-  /** toolResult 专用：结构化结果细节（Pi `AgentToolResult.details`，types.ts L365）。 */
+  /** toolResult only: structured result details (Pi `AgentToolResult.details`, types.ts L365). */
   details?: unknown;
-  /** toolResult 专用：工具执行用量（Pi types.ts L366-367；不参与主上下文计费）。 */
+  /** toolResult only: tool execution usage (Pi types.ts L366-367; not billed to the main context). */
   usage?: { inputTokens?: number; outputTokens?: number };
-  /** toolResult 专用：提示本批工具执行后应停止（Pi types.ts L374；批终止语义）。 */
+  /** toolResult only: signals that execution should stop after this tool batch (Pi types.ts L374; batch termination semantics). */
   terminate?: boolean;
-  /** toolResult 专用：本结果引入、此后可用的工具名（Pi types.ts L368-369；09 章动态工具）。 */
+  /** toolResult only: tool names introduced by this result and available from now on (Pi types.ts L368-369; Chapter 09 dynamic tools). */
   addedToolNames?: string[];
-  /** UI 专用消息标记：convertToLlm 过滤（Pi 注释示例：Filter out UI-only messages，types.ts L170-172）。 */
+  /** UI-only message flag: filtered out by convertToLlm (Pi comment example: Filter out UI-only messages, types.ts L170-172). */
   uiOnly?: boolean;
 }
 
-/** 停止原因（教学五值）。 */
+/** Stop reason (five teaching values). */
 export type StopReason = "end_turn" | "tool_use" | "length" | "error" | "aborted";
 
-/** assistant 消息：`stopReason` 是循环的分支依据（02 章起显式使用）。 */
+/** Assistant message: `stopReason` is what the loop branches on (used explicitly from Chapter 02). */
 export interface AssistantMessage extends Message {
   role: "assistant";
   stopReason: StopReason;
   /**
-   * 推理过程文本（块级，非流式事件）。
-   * 真实端点会返回 thinking 块，Anthropic 协议要求原样回传（否则 400）——
-   * 教学剪裁：不做流式 thinking 事件，但 adapter 保留并回传文本。
+   * Reasoning text (block-level, not streaming events).
+   * Real endpoints return thinking blocks, and the Anthropic protocol requires sending them back as-is (otherwise 400).
+   * Teaching trim: no streaming thinking events, but the adapter keeps the text and sends it back.
    */
   thinking?: string;
-  /** thinking 块的签名（协议要求与文本一起回传，SDK 类型必填）。 */
+  /** Signature of the thinking block (the protocol requires sending it back with the text; required in the SDK type). */
   thinkingSignature?: string;
 }
 
 /**
- * LLM 流式事件（Pi `AssistantMessageEvent` 简化，pi-ai L535-556）。
- * 每个事件带 `partial`：当前完整的 assistant 消息快照（agent-loop.ts L335-343 的替换机制依赖此）。
- * - start：流开始（Pi L319-324 消费点）；注意 partial.toolCalls 此时为空数组
- *   （工具调用块在流中间才到达，start 快照不含；done 时完整，见 adapter 实现）
- * - text_* / toolcall_*：增量事件（toolcall_delta 独立事件未复刻；adapter 只对
- *   text_delta 产出事件，纯工具调用轮无增量事件，消费方以 done 快照为准）
- * - done：流完成，partial 为最终消息（error 编码进 done 的 stopReason）
+ * LLM streaming events (simplified Pi `AssistantMessageEvent`, pi-ai L535-556).
+ * Every event carries `partial`: a snapshot of the current complete assistant message (the replacement mechanism in agent-loop.ts L335-343 relies on it).
+ * - start: the stream begins (Pi L319-324 consumption point); note that partial.toolCalls is an empty array here
+ *   (tool call blocks arrive mid-stream, so the start snapshot has none; they are complete at done, see the adapter implementation)
+ * - text_* / toolcall_*: delta events (the separate toolcall_delta event is not reproduced; the adapter only emits events for
+ *   text_delta, so a tool-call-only turn has no delta events and consumers rely on the done snapshot)
+ * - done: the stream is complete and partial is the final message (errors are encoded in done's stopReason)
  */
 export type AssistantMessageEvent =
   | { type: "start"; partial: AssistantMessage }
@@ -74,7 +74,7 @@ export type AssistantMessageEvent =
   | { type: "toolcall_start" | "toolcall_end"; partial: AssistantMessage }
   | { type: "done"; partial: AssistantMessage };
 
-/** 极简 JSON Schema（校验器见 validate.ts；索引签名满足 Anthropic SDK InputSchema）。 */
+/** Minimal JSON Schema (validator in validate.ts; the index signature satisfies the Anthropic SDK InputSchema). */
 export interface ToolParameters {
   type: "object";
   properties: Record<string, { type: string; description?: string }>;
@@ -83,28 +83,28 @@ export interface ToolParameters {
 }
 
 /**
- * 工具执行结果：对应 Pi `AgentToolResult`（types.ts L361-375）。
- * 03 章起工具返回结构化结果，不再只有 content 字符串。
+ * Tool execution result: maps to Pi `AgentToolResult` (types.ts L361-375).
+ * From Chapter 03, tools return structured results, not just a content string.
  */
 export interface ToolResult {
-  /** 回传给模型的内容（Pi `content`，types.ts L363）。 */
+  /** Content sent back to the model (Pi `content`, types.ts L363). */
   content: string;
-  /** 供日志/UI 的结构化数据（types.ts L365）。 */
+  /** Structured data for logs/UI (types.ts L365). */
   details?: unknown;
-  /** 工具执行用量（types.ts L366-367）。 */
+  /** Tool execution usage (types.ts L366-367). */
   usage?: { inputTokens?: number; outputTokens?: number };
-  /** 提示本批工具执行后应停止（types.ts L374；批终止语义）。 */
+  /** Signals that execution should stop after this tool batch (types.ts L374; batch termination semantics). */
   terminate?: boolean;
-  /** 本结果引入、此后可用的工具名（types.ts L368-369）。 */
+  /** Tool names introduced by this result and available from now on (types.ts L368-369). */
   addedToolNames?: string[];
 }
 
 /**
- * 工具定义：对应 Pi `AgentTool`（types.ts L386-409）。
- * - `prepareArguments`：兼容层，把模型原始参数转为工具期望的格式（Pi L393-394）
- * - `execute`：失败抛异常；`onUpdate` 为 partial 更新回调；`signal` 为中止信号
- *   （Pi L395-400：execute(toolCallId, params, signal, onUpdate)；教学剪裁 toolCallId，signal 保留）
- * - `executionMode`：单工具执行模式覆盖（Pi L402-408；04 章使用）
+ * Tool definition: maps to Pi `AgentTool` (types.ts L386-409).
+ * - `prepareArguments`: compatibility layer that converts the model's raw arguments into the format the tool expects (Pi L393-394)
+ * - `execute`: throws on failure; `onUpdate` is the partial update callback; `signal` is the abort signal
+ *   (Pi L395-400: execute(toolCallId, params, signal, onUpdate); toolCallId trimmed for teaching, signal kept)
+ * - `executionMode`: per-tool execution mode override (Pi L402-408; used in Chapter 04)
  */
 export interface Tool<TArgs extends Record<string, unknown> = Record<string, unknown>> {
   name: string;
@@ -115,22 +115,22 @@ export interface Tool<TArgs extends Record<string, unknown> = Record<string, unk
   executionMode?: "sequential" | "parallel";
 }
 
-/** 循环输入上下文：对应 Pi `AgentContext`（types.ts L412-419）。 */
+/** Loop input context: maps to Pi `AgentContext` (types.ts L412-419). */
 export interface AgentContext {
   systemPrompt: string;
   messages: Message[];
   tools?: Tool[];
 }
 
-/** `beforeToolCall` 的返回：可阻止执行（Pi `BeforeToolCallResult`，types.ts L61-69）。 */
+/** Return value of `beforeToolCall`: can block execution (Pi `BeforeToolCallResult`, types.ts L61-69). */
 export interface BeforeToolCallResult {
   block?: boolean;
   reason?: string;
-  /** 阻止时也参与批终止判定。 */
+  /** Also counts toward the batch termination decision when blocking. */
   terminate?: boolean;
 }
 
-/** `beforeToolCall` 的输入（Pi types.ts L98-107）。 */
+/** Input of `beforeToolCall` (Pi types.ts L98-107). */
 export interface BeforeToolCallContext {
   assistantMessage: AssistantMessage;
   toolCall: ToolCall;
@@ -138,7 +138,7 @@ export interface BeforeToolCallContext {
   context: AgentContext;
 }
 
-/** `afterToolCall` 的返回：字段级改写（Pi `AfterToolCallResult`，types.ts L84-95，不做深合并）。 */
+/** Return value of `afterToolCall`: field-level overrides (Pi `AfterToolCallResult`, types.ts L84-95, no deep merge). */
 export interface AfterToolCallResult {
   content?: string;
   details?: unknown;
@@ -148,7 +148,7 @@ export interface AfterToolCallResult {
   isError?: boolean;
 }
 
-/** `afterToolCall` 的输入（Pi types.ts L110-123）。 */
+/** Input of `afterToolCall` (Pi types.ts L110-123). */
 export interface AfterToolCallContext {
   assistantMessage: AssistantMessage;
   toolCall: ToolCall;
@@ -158,72 +158,72 @@ export interface AfterToolCallContext {
   context: AgentContext;
 }
 
-/** 工具执行模式：Pi `ToolExecutionMode`（types.ts L37-42）。默认 "parallel"。 */
+/** Tool execution mode: Pi `ToolExecutionMode` (types.ts L37-42). Defaults to "parallel". */
 export type ToolExecutionMode = "sequential" | "parallel";
 
-/** `prepareNextTurn` 的返回：替换下一轮的 context/model/thinkingLevel（Pi `AgentLoopTurnUpdate`，types.ts L138-145）。 */
+/** Return value of `prepareNextTurn`: replaces the context/model/thinkingLevel for the next turn (Pi `AgentLoopTurnUpdate`, types.ts L138-145). */
 export interface AgentLoopTurnUpdate {
   context?: AgentContext;
   model?: string;
 }
 
 /**
- * 循环配置：Pi `AgentLoopConfig`（types.ts L149-293）子集。
- * 类型面集中声明于此；对应运行时机制在后续章节逐步实现
- * （transformContext/prepareNextTurn/shouldStopAfterTurn/getApiKey → 06 章）。
+ * Loop configuration: subset of Pi `AgentLoopConfig` (types.ts L149-293).
+ * The type surface is declared here in one place; the matching runtime mechanisms are implemented step by step in later chapters
+ * (transformContext/prepareNextTurn/shouldStopAfterTurn/getApiKey → Chapter 06).
  */
 export interface AgentLoopConfig {
   model: string;
-  /** 工具执行前钩子：可 block（Pi L619-647）。 */
+  /** Hook before tool execution: can block (Pi L619-647). */
   beforeToolCall?: (context: BeforeToolCallContext) => Promise<BeforeToolCallResult | undefined>;
-  /** 工具执行后钩子：字段级改写结果（Pi L724-751）。 */
+  /** Hook after tool execution: field-level overrides of the result (Pi L724-751). */
   afterToolCall?: (context: AfterToolCallContext) => Promise<AfterToolCallResult | undefined>;
-  /** 工具批次执行模式：默认并行（Pi types.ts L266-268；分流判定 L411-426）。 */
+  /** Execution mode for a tool batch: parallel by default (Pi types.ts L266-268; dispatch decision L411-426). */
   toolExecution?: ToolExecutionMode;
   /**
-   * 运行中注入（steering）：每个回合结束后取一次（Pi L259，初始取点 L167）。
-   * 返回的消息在下一个 LLM 调用前进入历史（L182-190）——「当前工作流内的打断」。
-   * 契约（Pi types.ts L242-243/L255-256）：无消息必须返回 []，不得返回 undefined 或抛错——
-   * 否则内层循环条件（pendingMessages.length > 0）永不满足会死循环。
+   * Mid-run injection (steering): fetched once after each turn ends (Pi L259, initial fetch point L167).
+   * The returned messages enter history before the next LLM call (L182-190): "an interruption within the current workflow".
+   * Contract (Pi types.ts L242-243/L255-256): with no messages it must return []; it must not return undefined or throw.
+   * Otherwise the inner loop condition (pendingMessages.length > 0) is never satisfied and the loop never ends.
    */
   getSteeringMessages?: () => Promise<Message[]>;
   /**
-   * 停止后注入（follow-up）：内层循环退出（无工具、无 steering）后取一次（Pi L263-268）。
-   * 非空则回到外层循环继续——「当前工作流结束后的新开始」。
-   * 契约同 steering：无消息返回 []。
+   * Post-stop injection (follow-up): fetched once after the inner loop exits (no tools, no steering) (Pi L263-268).
+   * If non-empty, control goes back to the outer loop and continues: "a new start after the current workflow ends".
+   * Same contract as steering: return [] when there are no messages.
    */
   getFollowUpMessages?: () => Promise<Message[]>;
   /**
-   * LLM 调用前的上下文变换（Pi L289-292）：AgentMessage[] → AgentMessage[]。
-   * 用于上下文窗口管理（裁剪旧消息）、注入外部资料（types.ts L180-200）。
-   * 发生在 convertToLlm 之前，变换的是内部消息（Context as a Hook）。
+   * Context transform before the LLM call (Pi L289-292): AgentMessage[] → AgentMessage[].
+   * Used for context window management (trimming old messages) and injecting external material (types.ts L180-200).
+   * Runs before convertToLlm and transforms internal messages (Context as a Hook).
    */
   transformContext?: (messages: Message[], signal?: AbortSignal) => Promise<Message[]>;
   /**
-   * 每次 LLM 调用前动态解析 API key（Pi L304-306，OAuth 过期场景 types.ts L202-210）。
-   * 未设置时返回 undefined。
+   * Resolves the API key dynamically before every LLM call (Pi L304-306; OAuth expiry scenario types.ts L202-210).
+   * Returns undefined when not set.
    */
   getApiKey?: () => Promise<string | undefined> | string | undefined;
   /**
-   * turn_end 后调用：返回替换的 context/model 用于下一轮（Pi L232-245 + types.ts L138-145）。
-   * 返回 undefined 则沿用当前。
+   * Called after turn_end: returns a replacement context/model for the next turn (Pi L232-245 + types.ts L138-145).
+   * Returning undefined keeps the current ones.
    */
   prepareNextTurn?: (context: { message: AssistantMessage; toolResults: Message[]; context: AgentContext; newMessages: Message[] }) => Promise<AgentLoopTurnUpdate | undefined>;
   /**
-   * turn_end 后调用：返回 true 则优雅停止（Pi L247-257，如 context 将满 types.ts L218）。
-   * 与终止①（error 立即停）不同：当前回合的工具结果已正常落盘。
+   * Called after turn_end: returning true stops gracefully (Pi L247-257, e.g. when the context is about to fill up, types.ts L218).
+   * Unlike termination ① (stop immediately on error): the current turn's tool results have already been persisted normally.
    */
   shouldStopAfterTurn?: (context: { message: AssistantMessage; toolResults: Message[]; context: AgentContext; newMessages: Message[] }) => boolean | Promise<boolean>;
   /**
-   * 动态工具加载：工具结果带 addedToolNames 时调用，把新工具加入后续轮次的 context.tools
-   * （Pi ToolResultMessage 注释：Names from Context.tools that became available after this result）。
+   * Dynamic tool loading: called when a tool result carries addedToolNames, adding the new tools to context.tools for later turns
+   * (Pi ToolResultMessage comment: Names from Context.tools that became available after this result).
    */
   loadTools?: (names: string[]) => Tool[];
 }
 
 /**
- * 事件模型：Pi `AgentEvent`（types.ts L428-443）全部四类。
- * 03 章补全 `tool_execution_*`（工具执行生命周期，L441-450/L767-775）。
+ * Event model: all four categories of Pi `AgentEvent` (types.ts L428-443).
+ * Chapter 03 completes `tool_execution_*` (the tool execution lifecycle, L441-450/L767-775).
  */
 export type AgentEvent =
   | { type: "agent_start" }

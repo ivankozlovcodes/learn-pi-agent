@@ -1,23 +1,23 @@
 /**
- * 00 章测试：LLM 边界转换（convertToLlm）与 EventStream 生产-消费解耦。
- * 基座层的测试不依赖真实 API（离线）；真实端点验证见 demo.ts。
+ * Chapter 00 tests: LLM boundary conversion (convertToLlm) and EventStream producer-consumer decoupling.
+ * The base-layer tests don't depend on the real API (offline); for real-endpoint verification see demo.ts.
  */
 import { describe, expect, it } from "vitest";
 import { convertToLlm } from "../src/llm.ts";
 import { EventStream } from "../src/stream.ts";
 import type { AssistantMessage, Message } from "../src/types.ts";
 
-describe("convertToLlm（★ 设计点 1：唯一边界转换，agent-loop.ts L295）", () => {
-  it("user 消息 → Anthropic MessageParam", () => {
-    const messages: Message[] = [{ role: "user", text: "你好" }];
+describe("convertToLlm (★ design point 1: the single boundary conversion, agent-loop.ts L295)", () => {
+  it("user message → Anthropic MessageParam", () => {
+    const messages: Message[] = [{ role: "user", text: "Hello" }];
     const llm = convertToLlm(messages);
-    expect(llm).toEqual([{ role: "user", content: "你好" }]);
+    expect(llm).toEqual([{ role: "user", content: "Hello" }]);
   });
 
-  it("assistant 消息（text + toolCalls）→ 块数组", () => {
+  it("assistant message (text + toolCalls) → block array", () => {
     const assistant: AssistantMessage = {
       role: "assistant",
-      text: "我需要计算",
+      text: "I need to calculate",
       toolCalls: [{ id: "call_1", name: "calculator", arguments: { a: 1, b: 2 } }],
       stopReason: "tool_use",
     };
@@ -27,17 +27,17 @@ describe("convertToLlm（★ 设计点 1：唯一边界转换，agent-loop.ts L2
       {
         role: "assistant",
         content: [
-          { type: "text", text: "我需要计算" },
+          { type: "text", text: "I need to calculate" },
           { type: "tool_use", id: "call_1", name: "calculator", input: { a: 1, b: 2 } },
         ],
       },
     ]);
   });
 
-  it("toolResult 消息 → 连续的合并为一条 user 消息（协议要求，多个 tool_result 块）", () => {
+  it("toolResult messages → consecutive ones merged into one user message (protocol requirement, multiple tool_result blocks)", () => {
     const messages: Message[] = [
       { role: "toolResult", toolCallId: "call_1", toolName: "calculator", text: "3", isError: false },
-      { role: "toolResult", toolCallId: "call_2", toolName: "boom", text: "失败", isError: true },
+      { role: "toolResult", toolCallId: "call_2", toolName: "boom", text: "failed", isError: true },
     ];
     const llm = convertToLlm(messages);
     expect(llm).toEqual([
@@ -45,34 +45,34 @@ describe("convertToLlm（★ 设计点 1：唯一边界转换，agent-loop.ts L2
         role: "user",
         content: [
           { type: "tool_result", tool_use_id: "call_1", content: "3", is_error: false },
-          { type: "tool_result", tool_use_id: "call_2", content: "失败", is_error: true },
+          { type: "tool_result", tool_use_id: "call_2", content: "failed", is_error: true },
         ],
       },
     ]);
   });
 
-  it("toolResult 被其他角色分隔时各自成组（只合并连续的）", () => {
+  it("toolResults separated by other roles form separate groups (only consecutive ones are merged)", () => {
     const messages: Message[] = [
       { role: "user", text: "hi" },
       { role: "toolResult", toolCallId: "call_1", toolName: "calculator", text: "3", isError: false },
-      { role: "user", text: "继续" },
-      { role: "toolResult", toolCallId: "call_2", toolName: "boom", text: "失败", isError: true },
+      { role: "user", text: "continue" },
+      { role: "toolResult", toolCallId: "call_2", toolName: "boom", text: "failed", isError: true },
     ];
     const llm = convertToLlm(messages);
     expect(llm).toEqual([
       { role: "user", content: "hi" },
       { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: "3", is_error: false }] },
-      { role: "user", content: "继续" },
-      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_2", content: "失败", is_error: true }] },
+      { role: "user", content: "continue" },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_2", content: "failed", is_error: true }] },
     ]);
   });
 });
 
-describe("EventStream（生产-消费解耦，pi-ai event-stream.ts）", () => {
+describe("EventStream (producer-consumer decoupling, pi-ai event-stream.ts)", () => {
   const endWhen = (e: { type: string; messages?: Message[] }) => e.type === "end";
   const extract = (e: { type: string; messages?: Message[] }) => e.messages ?? [];
 
-  it("先生产后消费：事件不丢不重复", async () => {
+  it("produce first, consume later: events are neither dropped nor duplicated", async () => {
     const stream = new EventStream<{ type: string; messages?: Message[] }, Message[]>(endWhen, extract);
     stream.push({ type: "a" });
     stream.push({ type: "b" });
@@ -85,7 +85,7 @@ describe("EventStream（生产-消费解耦，pi-ai event-stream.ts）", () => {
     expect(types).toEqual(["a", "b", "end"]);
   });
 
-  it("消费者先挂起等待，事件到达后唤醒交付", async () => {
+  it("the consumer suspends first and is woken up and handed the event when it arrives", async () => {
     const stream = new EventStream<{ type: string }, Message[]>(endWhen, extract);
     const iterator = stream[Symbol.asyncIterator]();
     const first = iterator.next();
@@ -95,11 +95,11 @@ describe("EventStream（生产-消费解耦，pi-ai event-stream.ts）", () => {
     expect((await iterator.next()).done).toBe(true);
   });
 
-  it("结束信号自动提取结果；end() 显式结束", async () => {
+  it("the end signal extracts the result automatically; end() ends explicitly", async () => {
     const stream = new EventStream<{ type: string; messages?: Message[] }, Message[]>(endWhen, extract);
     stream.push({ type: "end", messages: [{ role: "user", text: "x" }] });
     expect(await stream.result()).toEqual([{ role: "user", text: "x" }]);
-    stream.push({ type: "end", messages: [] }); // done 后 push 无效
+    stream.push({ type: "end", messages: [] }); // push after done has no effect
     const types: string[] = [];
     for await (const event of stream) {
       types.push(event.type);

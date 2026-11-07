@@ -1,12 +1,12 @@
 /**
- * 00 章共享基座：EventStream（事件队列 + 消费者等待的生产-消费解耦）。
+ * Chapter 00 shared base: EventStream (producer-consumer decoupling via an event queue + waiting consumers).
  *
- * 对齐 Pi 的 `EventStream`（pi-ai utils/event-stream.ts，全文件 88 行含 AssistantMessageEventStream；
- * 教学对照纯 EventStream 类 L4-67）全部语义：
- * - queue + waiting（L5-6/L29-35）：生产快于消费 → 排队；消费快于生产 → 挂起等待（不丢事件）
- * - AsyncIterable（L50-62）：`for await` 消费
- * - `isComplete`/`extractResult` 构造参数（L13-19）：结束信号与结果提取
- * - `push` 命中结束信号自动完成（L24-27）；`end(result)` 显式结束（L38-48）；`result()`（L64-66）
+ * Matches all the semantics of Pi's `EventStream` (pi-ai utils/event-stream.ts, 88 lines in total including AssistantMessageEventStream;
+ * the teaching counterpart is the plain EventStream class, L4-67):
+ * - queue + waiting (L5-6/L29-35): producer faster than consumer → queue up; consumer faster than producer → suspend and wait (no events dropped)
+ * - AsyncIterable (L50-62): consumed with `for await`
+ * - `isComplete`/`extractResult` constructor parameters (L13-19): end signal and result extraction
+ * - `push` completes automatically when it hits the end signal (L24-27); `end(result)` ends explicitly (L38-48); `result()` (L64-66)
  */
 export class EventStream<TEvent, TResult> implements AsyncIterable<TEvent> {
   private queue: TEvent[] = [];
