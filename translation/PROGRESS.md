@@ -31,14 +31,14 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | 01 | chapters/01-tool-driven-agent/** | merged | add3e34 |
 | 02 | chapters/02-agent-runtime/** | merged | 47c7b3f |
 | 03 | chapters/03-tool-runtime/** | merged | f09c02d |
-| 04 | chapters/04-parallel-tools/** | running | |
-| 05 | chapters/05-steering-followup/** | running | |
-| 06 | chapters/06-context-transform/** | running | |
+| 04 | chapters/04-parallel-tools/** | merged | 471cf4e |
+| 05 | chapters/05-steering-followup/** | merged | 4caec73 |
+| 06 | chapters/06-context-transform/** | merged | ea7d064 |
 | 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | merged | fbe8675 |
-| 08 | chapters/08-context-compaction/** | pending | |
-| 09 | chapters/09-skills/** | pending | |
-| 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | running | |
-| 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | pending | |
+| 08 | chapters/08-context-compaction/** | running | |
+| 09 | chapters/09-skills/** | running | |
+| 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | merged | 0e23ca5 |
+| 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | running | |
 | 12 | chapters/12-coding-agent/** | pending | |
 | root | README.en.md alignment + upstream credit (parent, Phase 4) | pending | |
 
@@ -46,7 +46,7 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 none
 
 ## Next action
-04, 05, 06, 10 running. Then 08, 09 as slots free; 11 after 10; 12 after 11.
+08, 09, 11 running; 12 after 11. Then consistency pass (e.g. `(none)` vs `(no reply)` demo fallback drift).
 
 ## Notes
 - Lanes must not run `npm ci`: worktree `node_modules` symlinks to the main checkout (it was wiped once and restored; after 01–03 + 07 the full suite is green, 211 tests).
