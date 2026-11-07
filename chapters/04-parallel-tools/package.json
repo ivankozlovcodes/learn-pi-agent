@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 04 章：Parallel Tool Execution（并发执行与保序）",
+  "description": "learn-pi-agent Chapter 04: Parallel Tool Execution (concurrent execution with preserved order)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
