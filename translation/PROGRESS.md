@@ -1,6 +1,6 @@
 # English translation — progress
 
-- **Phase:** 1 — glossary + tooling (running)
+- **Phase:** 2 — translation (running)
 - **Upstream SHA:** fc9dbf67d68743d79ea6b44361faadfeebab4985 (yiz-hhh/learn-pi-agent `main`)
 - **Fork:** https://github.com/ivankozlovcodes/learn-pi-agent (`main` = upstream mirror, `en-translation` = integration)
 
@@ -25,9 +25,9 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 ## Lanes
 | lane | files | status | commit |
 |---|---|---|---|
-| tooling | translation/check-*.mjs, residue-allowlist, fixtures | running | |
-| site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | pending | |
-| 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | pending | |
+| tooling | translation/check-*.mjs, residue-allowlist, fixtures | merged | ff7f7cc→cherry-picked |
+| site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | running | |
+| 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | running | |
 | 01 | chapters/01-tool-driven-agent/** | pending | |
 | 02 | chapters/02-agent-runtime/** | pending | |
 | 03 | chapters/03-tool-runtime/** | pending | |
@@ -46,4 +46,4 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 none
 
 ## Next action
-Merge the tooling lane, then launch the site + 00 lanes.
+site + 00 running. After 00 merges, launch 01, 02, 07, 03, then 04, 05, 06, 08, 09 as slots free; 10 after 07; 11 after 10; 12 after 11.
