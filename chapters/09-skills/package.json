@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 09 章：Skills（延迟加载能力说明，Part II Agent Harness）",
+  "description": "learn-pi-agent Chapter 09: Skills (lazily loaded capability descriptions, Part II Agent Harness)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",

@@ -1,6 +1,6 @@
 /**
- * 09 章测试：三种扩展形态，技能目录 + 按需读取、uiOnly 消息过滤、addedToolNames 动态工具。
- * 流式 mock LLM 驱动（离线）。
+ * Chapter 09 tests: the three forms of extension, skill catalog + on-demand reading, uiOnly message filtering, addedToolNames dynamic tools.
+ * Driven by a streaming mock LLM (offline).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -20,7 +20,7 @@ import type { LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AssistantMessageEvent, Message, Tool } from "../../00-minimal-llm-call/src/index.ts";
 import { createCalculatorTool, createEchoTool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 流式 mock LLM：记录输入（含 tools）。 */
+/** Streaming mock LLM: records inputs (including tools). */
 class ChatLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -58,23 +58,23 @@ function toolStream(calls: { id: string; name: string; args: Record<string, unkn
   ];
 }
 
-/** 返回 addedToolNames 的工具：引入 "echo" 工具。 */
+/** Tool that returns addedToolNames: brings in the "echo" tool. */
 function dynamicTool(): Tool {
   return {
     name: "unlock",
-    description: "解锁 echo 工具",
+    description: "Unlock the echo tool",
     parameters: { type: "object", properties: {} },
     async execute() {
-      return { content: "echo 已解锁", addedToolNames: ["echo"] };
+      return { content: "echo unlocked", addedToolNames: ["echo"] };
     },
   };
 }
 
-/** 按需读取工具：read_skill 返回技能文件内容（模型凭 location 调用）。 */
+/** On-demand read tool: read_skill returns the skill file contents (the model calls it with the location). */
 function readSkillTool(filePath: string): Tool {
   return {
     name: "read_skill",
-    description: "读取技能文件",
+    description: "Read a skill file",
     parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     async execute(args: { path: string }) {
       return { content: readSkillContent(args.path) };
@@ -82,7 +82,7 @@ function readSkillTool(filePath: string): Tool {
   };
 }
 
-/** 临时技能文件（afterEach 统一清理）。 */
+/** Temporary skill files (cleaned up together in afterEach). */
 let skillCounter = 0;
 let tempRoot: string | undefined;
 function tempSkillFile(content: string): string {
@@ -92,54 +92,54 @@ function tempSkillFile(content: string): string {
   return file;
 }
 
-describe("extensions（09 章）", () => {
-  it("formatSkillsForSystemPrompt：目录块只含 name/description/location，content 不在其中（Pi system-prompt.ts L3-25）", () => {
-    const file = tempSkillFile("用 calculator 工具计算");
+describe("extensions (Chapter 09)", () => {
+  it("formatSkillsForSystemPrompt: the catalog block holds only name/description/location, not content (Pi system-prompt.ts L3-25)", () => {
+    const file = tempSkillFile("Compute with the calculator tool");
     const block = formatSkillsForSystemPrompt([
-      { name: "calc", description: "处理计算任务", content: "用 calculator 工具计算", filePath: file },
+      { name: "calc", description: "Handle calculation tasks", content: "Compute with the calculator tool", filePath: file },
     ]);
     expect(block).toContain("<available_skills>");
     expect(block).toContain(`<skill name="calc" location="${file}">`);
-    expect(block).toContain("处理计算任务");
-    // content 不注入系统提示词：模型凭 location 按需读取
-    expect(block).not.toContain("用 calculator 工具计算");
+    expect(block).toContain("Handle calculation tasks");
+    // content isn't injected into the system prompt: the model reads it on demand via location
+    expect(block).not.toContain("Compute with the calculator tool");
     expect(formatSkillsForSystemPrompt([])).toBe("");
   });
 
-  it("readSkillContent / loadSkillFromFile：按需读取技能文件（Pi skills.ts L50-76 最小版）", () => {
-    const file = tempSkillFile("使用 calculator 工具计算结果。");
-    const skill = loadSkillFromFile(file, "calc", "处理算术计算");
-    expect(skill).toMatchObject({ name: "calc", description: "处理算术计算", filePath: file });
-    expect(skill.content).toBe("使用 calculator 工具计算结果。");
-    expect(readSkillContent(file)).toBe("使用 calculator 工具计算结果。");
+  it("readSkillContent / loadSkillFromFile: read the skill file on demand (minimal version of Pi skills.ts L50-76)", () => {
+    const file = tempSkillFile("Use the calculator tool to compute results.");
+    const skill = loadSkillFromFile(file, "calc", "Handle arithmetic calculations");
+    expect(skill).toMatchObject({ name: "calc", description: "Handle arithmetic calculations", filePath: file });
+    expect(skill.content).toBe("Use the calculator tool to compute results.");
+    expect(readSkillContent(file)).toBe("Use the calculator tool to compute results.");
   });
 
-  it("formatSkillInvocation：完整技能块（Pi skills.ts L38-41），可追加附加指令", () => {
-    const skill: Skill = { name: "calc", description: "计算", content: "用 calculator 计算", filePath: "/tmp/calc.md" };
+  it("formatSkillInvocation: full skill block (Pi skills.ts L38-41), can append additional instructions", () => {
+    const skill: Skill = { name: "calc", description: "Calculate", content: "Compute with calculator", filePath: "/tmp/calc.md" };
     const block = formatSkillInvocation(skill);
     expect(block).toContain('<skill name="calc" location="/tmp/calc.md">');
-    expect(block).toContain("用 calculator 计算");
-    expect(formatSkillInvocation(skill, "回答要简洁")).toContain("回答要简洁");
+    expect(block).toContain("Compute with calculator");
+    expect(formatSkillInvocation(skill, "Keep answers concise")).toContain("Keep answers concise");
   });
 
-  it("uiOnly 消息被 convertToLlm 过滤（Pi 注释示例：Filter out UI-only messages）", () => {
+  it("uiOnly messages are filtered by convertToLlm (Pi comment example: Filter out UI-only messages)", () => {
     const messages: Message[] = [
-      { role: "user", text: "任务" },
-      { role: "user", text: "UI 通知：正在连接", uiOnly: true },
-      { role: "assistant", text: "回复" },
+      { role: "user", text: "Task" },
+      { role: "user", text: "UI notice: connecting", uiOnly: true },
+      { role: "assistant", text: "Reply" },
     ];
     const llm = convertToLlm(messages);
     expect(llm).toHaveLength(2);
-    expect(llm.some((m) => m.role === "user" && (m as { content?: unknown }).content === "UI 通知：正在连接")).toBe(false);
+    expect(llm.some((m) => m.role === "user" && (m as { content?: unknown }).content === "UI notice: connecting")).toBe(false);
   });
 
-  it("addedToolNames 动态工具：结果引入新工具，后续轮次模型可见（Pi types.ts L368-369）", async () => {
+  it("addedToolNames dynamic tools: a result brings in new tools, visible to the model in later turns (Pi types.ts L368-369)", async () => {
     const registry = createToolRegistry([createCalculatorTool(), createEchoTool()]);
-    const chat = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("解锁后完成")]);
+    const chat = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("Done after unlocking")]);
 
     await runAgentLoop(
-      [{ role: "user", text: "解锁" }],
-      { systemPrompt: "助手", messages: [], tools: [createCalculatorTool(), dynamicTool()] },
+      [{ role: "user", text: "Unlock" }],
+      { systemPrompt: "Assistant", messages: [], tools: [createCalculatorTool(), dynamicTool()] },
       {
         model: "m",
         loadTools: (names) => registry.load(names),
@@ -148,54 +148,54 @@ describe("extensions（09 章）", () => {
       () => {},
     );
 
-    // 第 2 轮 LLM 输入的工具列表包含动态引入的 echo
+    // The tool list in the turn 2 LLM input includes the dynamically added echo
     expect(chat.seenInputs.length).toBe(2);
     const secondTools = chat.seenInputs[1].tools.map((t) => (t as { name: string }).name);
     expect(secondTools).toContain("echo");
   });
 
-  it("跨 run：动态加载的工具回写调用方 context（Pi transcript point onward 语义）", async () => {
+  it("Across runs: dynamically loaded tools are written back to the caller's context (Pi transcript point onward semantics)", async () => {
     const registry = createToolRegistry([createCalculatorTool(), createEchoTool()]);
     const context: Parameters<typeof runAgentLoop>[1] = {
-      systemPrompt: "助手",
+      systemPrompt: "Assistant",
       messages: [],
       tools: [createCalculatorTool(), dynamicTool()],
     };
-    // run 1：解锁 echo
-    const chat1 = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("解锁后完成")]);
+    // run 1: unlock echo
+    const chat1 = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("Done after unlocking")]);
     await runAgentLoop(
-      [{ role: "user", text: "解锁" }],
+      [{ role: "user", text: "Unlock" }],
       context,
       { model: "m", loadTools: (names) => registry.load(names) },
       chat1,
       () => {},
     );
-    // 调用方持有的 context.tools 已回写：echo 在 run 2 可用
+    // The caller's context.tools has been written back: echo is available in run 2
     expect(context.tools?.map((t) => (t as { name: string }).name)).toContain("echo");
-    // run 2：模型直接请求 echo
-    const chat2 = new ChatLlm([toolStream([{ id: "c2", name: "echo", args: { text: "你好" } }]), textStream("完成")]);
+    // run 2: the model requests echo directly
+    const chat2 = new ChatLlm([toolStream([{ id: "c2", name: "echo", args: { text: "hello" } }]), textStream("Done")]);
     const run2 = await runAgentLoop(
-      [{ role: "user", text: "回显" }],
+      [{ role: "user", text: "Echo" }],
       context,
       { model: "m", loadTools: (names) => registry.load(names) },
       chat2,
       () => {},
     );
     const echoResult = run2.find((m) => m.role === "toolResult" && m.toolName === "echo");
-    expect(echoResult).toMatchObject({ isError: false, text: "你好" });
+    expect(echoResult).toMatchObject({ isError: false, text: "hello" });
   });
 
-  it("组合：技能目录 + uiOnly 过滤 + 动态工具全链路", async () => {
-    const skillFile = tempSkillFile("用 calculator 工具计算");
+  it("Combined: skill catalog + uiOnly filtering + dynamic tools end to end", async () => {
+    const skillFile = tempSkillFile("Compute with the calculator tool");
     const skillsBlock = formatSkillsForSystemPrompt([
-      { name: "calc", description: "计算任务", content: "用 calculator 工具计算", filePath: skillFile },
+      { name: "calc", description: "Calculation tasks", content: "Compute with the calculator tool", filePath: skillFile },
     ]);
-    const systemPrompt = `你是一个助手。\n${skillsBlock}`;
+    const systemPrompt = `You are an assistant.\n${skillsBlock}`;
     const registry = createToolRegistry([createEchoTool()]);
-    const chat = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("完成")]);
+    const chat = new ChatLlm([toolStream([{ id: "c1", name: "unlock", args: {} }]), textStream("Done")]);
 
     await runAgentLoop(
-      [{ role: "user", text: "解锁并计算" }, { role: "user", text: "（连接状态）", uiOnly: true }],
+      [{ role: "user", text: "Unlock and calculate" }, { role: "user", text: "(connection status)", uiOnly: true }],
       { systemPrompt, messages: [], tools: [createCalculatorTool(), dynamicTool()] },
       {
         model: "m",
@@ -205,42 +205,42 @@ describe("extensions（09 章）", () => {
       () => {},
     );
 
-    // 第 1 轮输入：内部历史含 uiOnly 消息（过滤发生在 convertToLlm，adapter 内部；独立用例验证）
+    // Turn 1 input: the internal history contains the uiOnly message (filtering happens in convertToLlm inside the adapter; verified by a separate case)
     expect(chat.seenInputs[0].messages).toHaveLength(2);
-    expect(chat.seenInputs[0].messages[0]).toMatchObject({ role: "user", text: "解锁并计算" });
+    expect(chat.seenInputs[0].messages[0]).toMatchObject({ role: "user", text: "Unlock and calculate" });
   });
 
-  it("on-demand 链路：模型按需读取技能文件后按指令执行（Pi 目录 + 按需读取机制）", async () => {
-    const skillFile = tempSkillFile("使用 calculator 工具计算结果，回答要简洁。");
-    const skill: Skill = { name: "calc", description: "计算任务", content: readSkillContent(skillFile), filePath: skillFile };
-    const systemPrompt = "你是一个计算助手。\n" + formatSkillsForSystemPrompt([skill]);
+  it("on-demand chain: the model reads the skill file on demand, then follows its instructions (Pi catalog + on-demand reading mechanism)", async () => {
+    const skillFile = tempSkillFile("Use the calculator tool to compute results, and keep answers concise.");
+    const skill: Skill = { name: "calc", description: "Calculation tasks", content: readSkillContent(skillFile), filePath: skillFile };
+    const systemPrompt = "You are a calculation assistant.\n" + formatSkillsForSystemPrompt([skill]);
     const chat = new ChatLlm([
       toolStream([{ id: "c1", name: "read_skill", args: { path: skillFile } }]),
       toolStream([{ id: "c2", name: "calculator", args: { a: 1, b: 2 } }]),
-      textStream("结果 3"),
+      textStream("Result 3"),
     ]);
 
     const results = await runAgentLoop(
-      [{ role: "user", text: "计算 1+2" }],
+      [{ role: "user", text: "Calculate 1+2" }],
       { systemPrompt, messages: [], tools: [createCalculatorTool(), readSkillTool(skillFile)] },
       { model: "m" },
       chat,
       () => {},
     );
 
-    // read_skill 的结果把技能内容带回历史（模型可见）
+    // The read_skill result brings the skill content back into history (visible to the model)
     const readResult = results.find((m) => m.role === "toolResult" && m.toolName === "read_skill");
     expect(readResult).toMatchObject({ isError: false });
-    expect(readResult?.text).toContain("使用 calculator 工具计算结果");
-    // 随后模型按技能指令调用 calculator
+    expect(readResult?.text).toContain("Use the calculator tool to compute results");
+    // Then the model calls calculator per the skill instructions
     expect(results.some((m) => m.role === "toolResult" && m.toolName === "calculator")).toBe(true);
   });
 
-  it("回归：无扩展时行为不变（uiOnly 不存在、无动态工具）", async () => {
-    const chat = new ChatLlm([textStream("完成")]);
+  it("Regression: behavior is unchanged without extensions (no uiOnly, no dynamic tools)", async () => {
+    const chat = new ChatLlm([textStream("Done")]);
     await runAgentLoop(
       [{ role: "user", text: "hi" }],
-      { systemPrompt: "助手", messages: [], tools: [createCalculatorTool()] },
+      { systemPrompt: "Assistant", messages: [], tools: [createCalculatorTool()] },
       { model: "m" },
       chat,
       () => {},
