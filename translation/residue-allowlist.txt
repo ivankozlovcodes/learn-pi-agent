@@ -1,0 +1,14 @@
+# Globs of files allowed to contain Chinese (\p{Han}); used by check-residue.mjs.
+# One glob per line; `#` starts a comment; blank lines are ignored.
+
+# Chinese sources (the zh locale is kept as-is)
+README.md
+chapters/*/README.md
+website/chapters/*.md
+website/index.md
+# zh UI strings for the VitePress root locale (site lane must keep all zh UI copy here)
+website/.vitepress/i18n/zh.ts
+# zh social card
+website/public/og-cover.svg
+# translation tooling + glossary (contain Chinese by design)
+translation/**
