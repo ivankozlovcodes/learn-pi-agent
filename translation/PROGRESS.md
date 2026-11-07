@@ -26,7 +26,7 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | lane | files | status | commit |
 |---|---|---|---|
 | tooling | translation/check-*.mjs, residue-allowlist, fixtures | merged | ff7f7cc→cherry-picked |
-| site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | running | |
+| site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | merged | 1ed499f |
 | 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | running | |
 | 01 | chapters/01-tool-driven-agent/** | pending | |
 | 02 | chapters/02-agent-runtime/** | pending | |
