@@ -7,7 +7,7 @@ const copyByLocale: Record<string, SiteCopy> = { root: zh, en };
 
 /**
  * Locale-aware UI copy and link prefix for theme components.
- * `prefix` is "" for the root (zh) locale and "en/" for English; use it as `withBase(prefix + "chapters/…")`.
+ * `prefix` is "" for the root (zh) locale and "en/" for English; use it as `withBase("/" + prefix + "chapters/…")`.
  */
 export function useSiteCopy() {
   const { localeIndex } = useData();

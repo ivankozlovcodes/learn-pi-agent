@@ -204,7 +204,7 @@ onBeforeUnmount(() => dispose());
           '--lx': `${initial[i].lx.toFixed(1)}px`,
           '--ly': `${initial[i].ly.toFixed(1)}px`,
         }"
-        :href="withBase(prefix + node.slug)"
+        :href="withBase('/' + prefix + node.slug)"
         @mouseenter="setHovered(node.key)"
         @mouseleave="setHovered(null)"
         @focus="setHovered(node.key)"

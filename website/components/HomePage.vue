@@ -46,7 +46,7 @@ onMounted(() => {
 
         <a
           class="home-cta"
-          :href="withBase(prefix + 'chapters/00-minimal-llm-call')"
+          :href="withBase('/' + prefix + 'chapters/00-minimal-llm-call')"
         >
           {{ copy.home.cta }} <span aria-hidden="true">→</span>
         </a>
