@@ -25,11 +25,21 @@ function toPosix(p) {
   return p.split(path.sep).join('/');
 }
 
+// Allowlist lines are file globs, or `text:<literal>` entries whose literal is
+// removed from every line before the Han test (e.g. the "简体中文" switcher label).
 function readAllowlist() {
-  return readFileSync(allowlistPath, 'utf8')
+  const entries = readFileSync(allowlistPath, 'utf8')
     .split('\n')
     .map((line) => line.replace(/#.*$/, '').trim())
     .filter(Boolean);
+  return {
+    globs: entries.filter((e) => !e.startsWith('text:')),
+    texts: entries.filter((e) => e.startsWith('text:')).map((e) => e.slice(5)),
+  };
+}
+
+function stripAllowedText(line, texts) {
+  return texts.reduce((acc, t) => acc.split(t).join(''), line);
 }
 
 function matchesAny(file, globs) {
@@ -74,7 +84,7 @@ function main() {
   const args = process.argv.slice(2);
   const summaryOnly = args.includes('--summary');
   const filters = args.filter((arg) => !arg.startsWith('--'));
-  const allowlist = readAllowlist();
+  const { globs: allowlist, texts: allowedTexts } = readAllowlist();
 
   let scanned = 0;
   let totalHitLines = 0;
@@ -99,7 +109,7 @@ function main() {
     const lines = buffer.toString('utf8').split('\n');
     let fileHits = 0;
     lines.forEach((line, index) => {
-      if (!HAN.test(line)) return;
+      if (!HAN.test(stripAllowedText(line, allowedTexts))) return;
       fileHits += 1;
       if (!summaryOnly) console.log(`${file}:${index + 1}: ${truncate(line.trim())}`);
     });

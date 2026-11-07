@@ -12,3 +12,5 @@ website/.vitepress/i18n/zh.ts
 website/public/og-cover.svg
 # translation tooling + glossary (contain Chinese by design)
 translation/**
+# Literal strings allowed anywhere (language switcher label)
+text:简体中文
