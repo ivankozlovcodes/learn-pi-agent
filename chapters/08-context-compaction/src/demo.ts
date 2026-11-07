@@ -1,21 +1,21 @@
 /**
- * 真实 API 演示：Session Compaction（Compaction as an Entry）。
+ * Real API demo: Session Compaction (Compaction as an Entry).
  *
- * 流程：
- * 1. scripted 长历史 U1 A1(toolCall) T1 U2(长文本) A2 U3 A3 写入 Entry 树并落盘（无 LLM）
- * 2. 压缩前先构造 Agent（initialMessages = 完整路径）——模拟「压缩发生时进程内已有 Agent」
- * 3. compactSession（真实 LLM 摘要）→ 结构断言：旧 history 不删、CompactionEntry append、context 变短
- * 4. agent.replaceMessages(重建 context)：同一进程下一次 run 即用 summary + 保留段（无需 reload）
- * 5. 新回合消息继续 append + 落盘 → loadTree → 重建结果一致（compaction 跨 run 持久）
- * 6. 简短 Branch B：从压缩前节点分叉 → 该 path 不受 compaction 影响
+ * Flow:
+ * 1. A scripted long history U1 A1(toolCall) T1 U2(long text) A2 U3 A3 is written into the Entry tree and persisted to disk (no LLM)
+ * 2. Build the Agent before Compaction (initialMessages = full path): simulates "an Agent already exists in the process when Compaction happens"
+ * 3. compactSession (real LLM summary) → structural assertions: old history not deleted, CompactionEntry appended, context shorter
+ * 4. agent.replaceMessages(rebuilt context): the next run in the same process uses summary + retained tail (no reload needed)
+ * 5. New turn messages keep being appended + persisted to disk → loadTree → same reconstruction result (compaction persists across runs)
+ * 6. A short Branch B: fork from a pre-Compaction node → that path is unaffected by compaction
  *
- * 输出分三节：
- * - Persistent Session：entry 数量/父链（稳定机制，全部程序化断言）
- * - Reconstructed Context：canonical messages 组成（稳定机制，程序化断言）
- * - Model-dependent：具体摘要文本与模型回复（不做断言，仅供参考）
+ * The output has three sections:
+ * - Persistent Session: entry count/parent chain (stable mechanism, all asserted programmatically)
+ * - Reconstructed Context: composition of the canonical messages (stable mechanism, asserted programmatically)
+ * - Model-dependent: the actual summary text and model reply (not asserted, for reference only)
  *
- * 前置条件：可用的 LLM API 凭据；模型经环境变量 CLAUDE_MODEL 指定。
- * 运行：npm run demo
+ * Prerequisites: working LLM API credentials; the model is set via the CLAUDE_MODEL environment variable.
+ * Run: npm run demo
  */
 import { rmSync } from "node:fs";
 import { AnthropicLlmAdapter } from "../../00-minimal-llm-call/src/index.ts";
@@ -27,9 +27,9 @@ import { TreeSession } from "./session-tree.ts";
 import { compactSession } from "./compaction.ts";
 
 const SESSION_FILE = "/tmp/learn-pi-agent-demo-compaction.jsonl";
-const HEADER = { version: 2 as const, systemPrompt: "你是一个简洁的助手。", model: "" };
+const HEADER = { version: 2 as const, systemPrompt: "You are a concise assistant.", model: "" };
 
-/** 记录每次 LLM 输入并转发给真实端点（输入组成是结构断言，回复文本是 Model-dependent）。 */
+/** Records every LLM input and forwards it to the real endpoint (input composition is a structural assertion; reply text is Model-dependent). */
 class RecordingAdapter implements LLMAdapter {
   readonly seenInputs: Message[][] = [];
 
@@ -41,15 +41,15 @@ class RecordingAdapter implements LLMAdapter {
   }
 }
 
-/** 程序化断言：demo 自带结构自检，失败即抛错退出（不依赖具体模型文本）。 */
+/** Programmatic assertion: the demo carries its own structural self-check and throws on failure (does not depend on specific model text). */
 function check(condition: boolean, label: string): void {
   if (!condition) {
-    throw new Error(`结构断言失败: ${label}`);
+    throw new Error(`Structural assertion failed: ${label}`);
   }
   console.log(`✓ ${label}`);
 }
 
-/** 角色摘要：toolCall 的 assistant 显示为 assistant(toolCall)。 */
+/** Role summary: an assistant with toolCalls is shown as assistant(toolCall). */
 function roleOf(m: Message): string {
   if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
     return "assistant(toolCall)";
@@ -60,27 +60,27 @@ function roleOf(m: Message): string {
 async function main(): Promise<void> {
   const model = process.env.CLAUDE_MODEL;
   if (!model) {
-    throw new Error("请设置 CLAUDE_MODEL 环境变量指定要使用的模型");
+    throw new Error("Set the CLAUDE_MODEL environment variable to the model to use");
   }
   HEADER.model = model;
 
   // ---------------------------------------------------------------------------
-  // 1. scripted 长历史（无 LLM；估算 token 1+6+1+34+1+9+1=53 > limitTokens=50，
-  //    keepRecentTokens=10 → 切点落在 U3，保留段 [U3, A3]）
+  // 1. Scripted long history (no LLM; estimated tokens 1+6+1+34+1+9+1=53 > limitTokens=50,
+  //    keepRecentTokens=10 → the cut point lands on U3, retained tail [U3, A3])
   // ---------------------------------------------------------------------------
-  console.log("=== Persistent Session：scripted 长历史（压缩前）===");
+  console.log("=== Persistent Session: scripted long history (before Compaction) ===");
   const tree = new TreeSession();
-  const u1 = tree.appendMessage({ role: "user", text: "任务一：请实现一个计算器。" });
+  const u1 = tree.appendMessage({ role: "user", text: "Task 1: please implement a calculator." });
   const a1 = tree.appendMessage({
     role: "assistant",
     stopReason: "tool_use",
     toolCalls: [{ id: "c1", name: "calculator", arguments: { a: 1, b: 2 } }],
   } as AssistantMessage);
   const t1 = tree.appendMessage({ role: "toolResult", toolCallId: "c1", toolName: "calculator", text: "3", isError: false });
-  const u2 = tree.appendMessage({ role: "user", text: "任务二：这是一段很长的参考文档……" + "x".repeat(132) });
-  const a2 = tree.appendMessage({ role: "assistant", stopReason: "end_turn", text: "回复二" } as AssistantMessage);
-  const u3 = tree.appendMessage({ role: "user", text: "任务三：再加一个乘法函数。" + "y".repeat(32) });
-  const a3 = tree.appendMessage({ role: "assistant", stopReason: "end_turn", text: "回复三" } as AssistantMessage);
+  const u2 = tree.appendMessage({ role: "user", text: "Task 2: here is a very long reference document..." + "x".repeat(132) });
+  const a2 = tree.appendMessage({ role: "assistant", stopReason: "end_turn", text: "Reply 2" } as AssistantMessage);
+  const u3 = tree.appendMessage({ role: "user", text: "Task 3: add a multiplication function too." + "y".repeat(32) });
+  const a3 = tree.appendMessage({ role: "assistant", stopReason: "end_turn", text: "Reply 3" } as AssistantMessage);
 
   const oldLeaf = tree.getLeafId();
   const oldIds = tree.getEntries().map((e) => e.id);
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
   console.log(`canonical messages (${tree.buildSessionContext().length}): ${tree.buildSessionContext().map(roleOf).join(", ")}`);
 
   // ---------------------------------------------------------------------------
-  // 2. 压缩发生前进程内已有 Agent（initialMessages = 完整路径 7 条）
+  // 2. An Agent already exists in the process before Compaction (initialMessages = full path, 7 messages)
   // ---------------------------------------------------------------------------
   const recording = new RecordingAdapter(new AnthropicLlmAdapter());
   const agent = new Agent({
@@ -100,33 +100,33 @@ async function main(): Promise<void> {
     config: { model },
     initialMessages: tree.getMessages(),
   });
-  check(agent.state.messages.length === 7, "压缩前 Agent 持有完整路径 7 条消息");
+  check(agent.state.messages.length === 7, "Before Compaction the Agent holds the full path of 7 messages");
 
   // ---------------------------------------------------------------------------
-  // 3. compactSession（真实 LLM 摘要）
+  // 3. compactSession (real LLM summary)
   // ---------------------------------------------------------------------------
-  console.log("\n=== Persistent Session：compaction（append CompactionEntry）===");
+  console.log("\n=== Persistent Session: compaction (append CompactionEntry) ===");
   const result = await compactSession(tree, new AnthropicLlmAdapter(), model, { limitTokens: 50, keepRecentTokens: 10 });
   if (!result) {
-    throw new Error("compactSession 返回 null（历史未超限或摘要失败）");
+    throw new Error("compactSession returned null (history under the limit or summary failed)");
   }
 
-  console.log("\n=== Model-dependent：摘要文本 ===");
+  console.log("\n=== Model-dependent: summary text ===");
   console.log(result.summary);
 
-  console.log("\n=== Persistent Session：结构断言 ===");
+  console.log("\n=== Persistent Session: structural assertions ===");
   const entriesAfter = tree.getEntries();
-  check(entriesAfter.length === oldIds.length + 1, `entries ${oldIds.length} → ${entriesAfter.length}（+1，纯追加）`);
-  check(oldIds.every((id) => entriesAfter.some((e) => e.id === id)), "旧 history 一条不少（old entries removed: 0）");
+  check(entriesAfter.length === oldIds.length + 1, `entries ${oldIds.length} → ${entriesAfter.length} (+1, append-only)`);
+  check(oldIds.every((id) => entriesAfter.some((e) => e.id === id)), "No old history entry missing (old entries removed: 0)");
   const compactionEntry = entriesAfter.find((e) => e.type === "compaction");
-  check(compactionEntry !== undefined && compactionEntry.parentId === oldLeaf, "CompactionEntry.parentId = 旧 leaf（A3）");
-  check(tree.getLeafId() === compactionEntry?.id, "append 后 leaf = CompactionEntry");
-  check(result.firstKeptEntryId === u3.id, "firstKeptEntryId = 第一个保留 entry（U3）");
-  check(compactionEntry !== undefined && compactionEntry.parentId === a3.id, "compaction parent 具体为 A3");
+  check(compactionEntry !== undefined && compactionEntry.parentId === oldLeaf, "CompactionEntry.parentId = old leaf (A3)");
+  check(tree.getLeafId() === compactionEntry?.id, "after append, leaf = CompactionEntry");
+  check(result.firstKeptEntryId === u3.id, "firstKeptEntryId = first retained entry (U3)");
+  check(compactionEntry !== undefined && compactionEntry.parentId === a3.id, "compaction parent is specifically A3");
   if (!compactionEntry) {
-    throw new Error("CompactionEntry 缺失");
+    throw new Error("CompactionEntry missing");
   }
-  // 落盘：CompactionEntry 与普通 entry 一样追加进 session 文件（Pi AgentSession 自动持久化，教学由 demo 显式调用）
+  // Persist to disk: the CompactionEntry is appended to the session file like any other entry (Pi AgentSession persists automatically; in teaching the demo calls it explicitly)
   appendEntries(SESSION_FILE, HEADER, [compactionEntry]);
 
   console.log("\n=== Reconstructed Context：buildSessionContext ===");
@@ -134,65 +134,65 @@ async function main(): Promise<void> {
   console.log(`before: 7 messages`);
   console.log(`after:  ${context.length} messages`);
   console.log(`roles:  ${context.map(roleOf).join(", ")}`);
-  check(context.length === 3, "context = summary + U3 + A3（3 条）");
-  check(context[0].role === "user" && context[0].text?.includes("<summary>") === true, "summary 投影为带 <summary> 标记的 user 消息");
-  check(context[1].role === "user" && context[2].role === "assistant", "保留段 [U3, A3] verbatim");
+  check(context.length === 3, "context = summary + U3 + A3 (3 messages)");
+  check(context[0].role === "user" && context[0].text?.includes("<summary>") === true, "summary is projected as a user message with the <summary> marker");
+  check(context[1].role === "user" && context[2].role === "assistant", "retained tail [U3, A3] verbatim");
 
   // ---------------------------------------------------------------------------
-  // 4. canonical state 刷新（无需 reload）：同一进程下一次 run 使用 summary + 保留段
+  // 4. canonical state refresh (no reload needed): the next run in the same process uses summary + retained tail
   // ---------------------------------------------------------------------------
-  console.log("\n=== canonical state 刷新（agent.replaceMessages，无需 reload）===");
-  agent.replaceMessages(result.context); // Pi agent-session.ts L2004-2007 的 seam
-  check(agent.state.messages.length === 3, "替换后 Agent 状态 = 重建 context（3 条）");
+  console.log("\n=== canonical state refresh (agent.replaceMessages, no reload needed) ===");
+  agent.replaceMessages(result.context); // the seam of Pi agent-session.ts L2004-2007
+  check(agent.state.messages.length === 3, "after replacement, Agent state = rebuilt context (3 messages)");
 
-  await agent.prompt("任务四：总结一下我们目前完成的工作。");
+  await agent.prompt("Task 4: summarize the work we have done so far.");
   const firstInput = recording.seenInputs[0];
-  console.log(`本次 LLM 输入 (${firstInput.length}): ${firstInput.map(roleOf).join(", ")}`);
-  check(firstInput.length === 4, "输入 = summary + U3 + A3 + 新 prompt（4 条）");
-  check(firstInput[0].text?.includes("<summary>") === true, "输入以 summary 消息开头");
-  check(firstInput.filter((m) => m.text?.includes("<summary>")).length === 1, "summary 消息恰好一条");
-  check(firstInput.slice(1).some((m) => m.text?.includes("任务一")) === false, "旧前缀内容只存在于 summary 中，不重复出现在输入里");
-  check(firstInput.some((m) => m.toolCalls && m.toolCalls.length > 0) === false, "旧 toolCall（A1）不在本次输入中");
+  console.log(`LLM input this time (${firstInput.length}): ${firstInput.map(roleOf).join(", ")}`);
+  check(firstInput.length === 4, "input = summary + U3 + A3 + new prompt (4 messages)");
+  check(firstInput[0].text?.includes("<summary>") === true, "input starts with the summary message");
+  check(firstInput.filter((m) => m.text?.includes("<summary>")).length === 1, "exactly one summary message");
+  check(firstInput.slice(1).some((m) => m.text?.includes("Task 1")) === false, "old prefix content exists only in the summary and is not repeated in the input");
+  check(firstInput.some((m) => m.toolCalls && m.toolCalls.length > 0) === false, "old toolCall (A1) is not in this input");
 
-  console.log("\n=== Model-dependent：模型基于「摘要 + 保留段」的回复 ===");
+  console.log("\n=== Model-dependent: model reply based on \"summary + retained tail\" ===");
   const reply = agent.state.messages.at(-1);
-  console.log(reply?.text ?? "(无)");
+  console.log(reply?.text ?? "(none)");
 
-  // 新回合消息继续 append（首条挂在 CompactionEntry 之下）并落盘
+  // New turn messages keep being appended (the first one hangs under the CompactionEntry) and persisted to disk
   const newEntries = agent.state.messages.slice(3).map((m) => tree.appendMessage(m));
-  check(newEntries.length === 2 && newEntries[0].parentId === compactionEntry?.id, "新回合首条 entry 挂在 CompactionEntry 之下");
+  check(newEntries.length === 2 && newEntries[0].parentId === compactionEntry?.id, "the first entry of the new turn hangs under the CompactionEntry");
   appendEntries(SESSION_FILE, HEADER, newEntries);
 
   // ---------------------------------------------------------------------------
-  // 5. 落盘 → 恢复：reconstruction 一致（compaction 跨 run 持久）
+  // 5. Persist to disk → restore: same reconstruction (compaction persists across runs)
   // ---------------------------------------------------------------------------
-  console.log("\n=== 从文件恢复（save/load 幂等）===");
+  console.log("\n=== Restore from file (save/load idempotent) ===");
   const loaded = loadTree(SESSION_FILE);
   if (!loaded) {
-    throw new Error("会话恢复失败");
+    throw new Error("Session restore failed");
   }
   const reloadedContext = loaded.tree.buildSessionContext();
   console.log(`reloaded canonical messages (${reloadedContext.length}): ${reloadedContext.map(roleOf).join(", ")}`);
-  check(reloadedContext.length === 5, "恢复后 = summary + U3 + A3 + 任务四 + 回复（5 条）");
-  check(reloadedContext[0].text?.includes("<summary>") === true, "恢复后 summary 消息仍在首位");
-  check(loaded.tree.getEntries().length === tree.getEntries().length, "恢复后 full entries 数量一致（历史仍可查）");
+  check(reloadedContext.length === 5, "after restore = summary + U3 + A3 + Task 4 + reply (5 messages)");
+  check(reloadedContext[0].text?.includes("<summary>") === true, "after restore, the summary message is still first");
+  check(loaded.tree.getEntries().length === tree.getEntries().length, "after restore, full entry count matches (history still queryable)");
 
   // ---------------------------------------------------------------------------
-  // 6. Branch B：从压缩前节点分叉（不经过 CompactionEntry）
+  // 6. Branch B: fork from a pre-Compaction node (not passing through the CompactionEntry)
   // ---------------------------------------------------------------------------
-  console.log("\n=== Branch B：从压缩前的 U2 分叉 ===");
+  console.log("\n=== Branch B: fork from the pre-Compaction U2 ===");
   tree.branch(u2.id);
-  tree.appendMessage({ role: "user", text: "分支B：换个思路重写。" });
+  tree.appendMessage({ role: "user", text: "Branch B: rewrite it a different way." });
   const branchBContext = tree.buildSessionContext();
   console.log(`branch B canonical messages (${branchBContext.length}): ${branchBContext.map(roleOf).join(", ")}`);
-  check(branchBContext.some((m) => m.text?.includes("<summary>")) === false, "分支 B path 不含 compaction → 完整原历史、0 条 summary");
+  check(branchBContext.some((m) => m.text?.includes("<summary>")) === false, "branch B path has no compaction → full original history, 0 summaries");
 }
 
 main()
   .finally(() => {
-    rmSync(SESSION_FILE, { force: true }); // 失败路径也清理会话文件
+    rmSync(SESSION_FILE, { force: true }); // clean up the session file on the failure path too
   })
   .catch((error: unknown) => {
-    console.error("\n演示失败:", error instanceof Error ? error.message : String(error));
+    console.error("\nDemo failed:", error instanceof Error ? error.message : String(error));
     process.exit(1);
   });

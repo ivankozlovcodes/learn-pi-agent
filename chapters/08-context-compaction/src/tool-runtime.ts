@@ -1,14 +1,14 @@
 /**
- * 04 章工具运行时：03 章合并版流水线拆分为两阶段（忠实 Pi 的函数结构）。
+ * Chapter 04 Tool Runtime: the merged Chapter 03 pipeline split into two phases (faithful to Pi's function structure).
  *
- * Pi 中本来就是两个函数：
+ * In Pi these are already two functions:
  * - `prepareToolCall`（L600-668）：lookup → prepareArguments → validate → beforeToolCall
- *   返回 PreparedToolCall（可执行）或 ImmediateToolCallOutcome（未找到/校验失败/blocked）
+ *   returns a PreparedToolCall (executable) or an ImmediateToolCallOutcome (not found/validation failed/blocked)
  * - `executePreparedToolCall`（L670-711）+ `finalizeExecutedToolCall`（L713-758）：
- *   执行 + onUpdate + afterToolCall，产出 FinalizedToolCallOutcome
+ *   execute + onUpdate + afterToolCall, producing a FinalizedToolCallOutcome
  *
- * 两阶段拆分是并行的前置条件（Pi L489-554）：prepare 串行（副作用安全、立即失败先收尾），
- * execute 并发。消息事件与 end 事件的分离见 agent-loop.ts 的 executeToolCallsParallel。
+ * The two-phase split is a precondition for parallel execution (Pi L489-554): prepare runs serially (side-effect safe, immediate failures wrap up first),
+ * execute runs concurrently. For the separation of message events and end events, see executeToolCallsParallel in agent-loop.ts.
  */
 import { validateToolArguments } from "../../00-minimal-llm-call/src/index.ts";
 import type {
@@ -22,10 +22,10 @@ import type {
   ToolResult,
 } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 事件输出（同前章）。 */
+/** Event output (same as the previous chapter). */
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
-/** 已准备好、可执行的工具调用（Pi `PreparedToolCall`，agent-loop.ts L556-561）。 */
+/** A prepared, executable tool call (Pi `PreparedToolCall`, agent-loop.ts L556-561). */
 export interface PreparedToolCall {
   kind: "prepared";
   tool: Tool;
@@ -33,30 +33,30 @@ export interface PreparedToolCall {
   toolCall: ToolCall;
 }
 
-/** 立即收尾的结果：未找到 / 校验失败 / 钩子 block（Pi `ImmediateToolCallOutcome` L563-567）。 */
+/** An immediately wrapped-up result: not found / validation failed / hook block (Pi `ImmediateToolCallOutcome` L563-567). */
 export interface ImmediateToolOutcome {
   kind: "immediate";
   message: Message;
   terminate: boolean;
 }
 
-/** 执行并最终化后的结果（Pi `FinalizedToolCallOutcome` L574-578）。 */
+/** The result after execution and finalization (Pi `FinalizedToolCallOutcome` L574-578). */
 export interface FinalizedToolOutcome {
   toolCall: ToolCall;
   result: ToolResult;
   isError: boolean;
 }
 
-/** 规范化后的工具结果消息（Pi `createToolResultMessage` L777-791）。 */
+/** The normalized tool result message (Pi `createToolResultMessage` L777-791). */
 export interface ToolResultMessage {
   message: Message;
   terminate: boolean;
 }
 
 /**
- * 阶段 1：prepare（Pi L600-668）。
- * 串行执行（无论最终是否并行）：lookup → 参数兼容 → 校验 → beforeToolCall。
- * 立即失败（未找到/校验失败/blocked）在此收尾，不需要进入并发阶段。
+ * Phase 1: prepare (Pi L600-668).
+ * Runs serially (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
+ * Immediate failures (not found/validation failed/blocked) wrap up here and never enter the concurrent phase.
  */
 export async function prepareToolCall(
   context: AgentContext,
@@ -66,7 +66,7 @@ export async function prepareToolCall(
   emit: AgentEventSink,
   signal?: AbortSignal,
 ): Promise<PreparedToolCall | ImmediateToolOutcome> {
-  // tool_execution_start：Pi L445-450 在 prepare 之前发出，携带原始参数（未找到也有 start，保证 end 配对）
+  // tool_execution_start: Pi L445-450 emits it before prepare, with the raw arguments (a not-found tool also gets a start, so every end has a matching start)
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
 
   // lookup（Pi L607）
@@ -75,23 +75,23 @@ export async function prepareToolCall(
     return immediate(toolCall, `Tool ${toolCall.name} not found`, false, emit);
   }
 
-  // 参数兼容层（Pi L586-598）
+  // Argument compatibility layer (Pi L586-598)
   let args: unknown = toolCall.arguments;
   if (tool.prepareArguments) {
     try {
       args = tool.prepareArguments(toolCall.arguments);
     } catch (error) {
-      return immediate(toolCall, `参数转换失败: ${messageOf(error)}`, false, emit);
+      return immediate(toolCall, `Argument conversion failed: ${messageOf(error)}`, false, emit);
     }
   }
 
-  // schema 校验（Pi L618）
+  // schema validation (Pi L618)
   const validation = validateToolArguments(tool, args);
   if (!validation.ok) {
-    return immediate(toolCall, `参数校验失败: ${validation.error}`, false, emit);
+    return immediate(toolCall, `Argument validation failed: ${validation.error}`, false, emit);
   }
 
-  // Pi L629-635：abort 后不再继续 prepare（Operation aborted 语义）
+  // Pi L629-635: after an abort, prepare stops (Operation aborted semantics)
   if (signal?.aborted) {
     return immediate(toolCall, "Operation aborted", false, emit);
   }
@@ -102,15 +102,15 @@ export async function prepareToolCall(
     try {
       before = await config.beforeToolCall({ assistantMessage, toolCall, args, context });
     } catch (error) {
-      // Pi L616-667：钩子抛错 → immediate 错误结果，不击穿批次
-      return immediate(toolCall, `beforeToolCall 钩子抛错: ${messageOf(error)}`, false, emit);
+      // Pi L616-667: hook threw → immediate error result, without breaking the batch
+      return immediate(toolCall, `beforeToolCall hook threw: ${messageOf(error)}`, false, emit);
     }
     if (before?.block) {
-      return immediate(toolCall, before.reason || "工具执行被阻止", before.terminate === true, emit);
+      return immediate(toolCall, before.reason || "Tool execution blocked", before.terminate === true, emit);
     }
   }
 
-  // Pi L648-654：beforeToolCall 之后再次检查 abort
+  // Pi L648-654: check abort again after beforeToolCall
   if (signal?.aborted) {
     return immediate(toolCall, "Operation aborted", false, emit);
   }
@@ -119,8 +119,8 @@ export async function prepareToolCall(
 }
 
 /**
- * 阶段 2a：执行 + finalize（Pi `executePreparedToolCall` L670-711 + `finalizeExecutedToolCall` L713-758）。
- * 并发执行时放入 thunk：只发 tool_execution_end（完成顺序），不产生消息事件（消息统一按源顺序生成）。
+ * Phase 2a: execute + finalize (Pi `executePreparedToolCall` L670-711 + `finalizeExecutedToolCall` L713-758).
+ * Wrapped in a thunk for concurrent execution: emits only tool_execution_end (completion order), no message events (messages are all generated in source order).
  */
 export async function executeAndFinalize(
   prepared: PreparedToolCall,
@@ -133,24 +133,24 @@ export async function executeAndFinalize(
   const { tool, args, toolCall } = prepared;
   let result: ToolResult;
   let isError = false;
-  let acceptingUpdates = true;  // Pi L676/L684：execute settle 后忽略迟到的 onUpdate
+  let acceptingUpdates = true;  // Pi L676/L684: ignore late onUpdate calls after execute settles
 
   try {
-    // Pi L679-682：signal 透传给工具 execute（长任务可自行中止）
+    // Pi L679-682: pass signal through to the tool's execute (long tasks can abort themselves)
     result = await tool.execute(args as never, (partial) => {
-      // 订阅者在 update 事件抛错不杀死工具执行（fire-and-forget 加 catch 防未处理拒绝）
-      // 订阅者在 update 事件抛错不杀死工具执行（Promise.resolve 包装防未处理拒绝）
-      if (!acceptingUpdates) return;  // Pi L684：settle 后忽略
+      // A subscriber throwing on an update event doesn't kill tool execution (fire-and-forget plus catch to prevent unhandled rejections)
+      // A subscriber throwing on an update event doesn't kill tool execution (Promise.resolve wrapper to prevent unhandled rejections)
+      if (!acceptingUpdates) return;  // Pi L684: ignore after settle
       void Promise.resolve(
         emit({
           type: "tool_execution_update",
           toolCallId: toolCall.id,
           toolName: toolCall.name,
-          args: toolCall.arguments,  // Pi L691：原始参数（prepare 前的模型参数）
+          args: toolCall.arguments,  // Pi L691: raw arguments (the model's arguments before prepare)
           partialResult: partial,
         }),
       ).catch((error: unknown) => {
-        console.error("订阅者处理 tool_execution_update 失败:", error instanceof Error ? error.message : String(error));
+        console.error("Subscriber failed to handle tool_execution_update:", error instanceof Error ? error.message : String(error));
       });
     }, signal);
   } catch (error) {
@@ -161,12 +161,12 @@ export async function executeAndFinalize(
   }
 
   if (config.afterToolCall) {
-    // Pi L726-736：afterToolCall 接收当前 context 与 assistantMessage
+    // Pi L726-736: afterToolCall receives the current context and assistantMessage
     let after;
     try {
       after = await config.afterToolCall({ assistantMessage, toolCall, args, result, isError, context });
     } catch (error) {
-      // Pi L747-750：钩子抛错 → 错误结果，不击穿整个批次
+      // Pi L747-750: hook threw → error result, without breaking the whole batch
       result = { content: messageOf(error) };
       isError = true;
     }
@@ -184,12 +184,12 @@ export async function executeAndFinalize(
     }
   }
 
-  // Pi L767-775：tool_execution_end 在 finalize 后立即发（完成顺序）
+  // Pi L767-775: tool_execution_end is emitted right after finalize (completion order)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result, isError });
   return { toolCall, result, isError };
 }
 
-/** 阶段 2b：规范化 + 消息事件（Pi `createToolResultMessage` L777-791 + `emitToolResultMessage` L793-796）。按 assistant 源顺序调用。 */
+/** Phase 2b: normalize + message events (Pi `createToolResultMessage` L777-791 + `emitToolResultMessage` L793-796). Called in the assistant's source order. */
 export async function emitToolResultMessage(
   finalized: FinalizedToolOutcome,
   emit: AgentEventSink,
@@ -198,7 +198,7 @@ export async function emitToolResultMessage(
     role: "toolResult",
     toolCallId: finalized.toolCall.id,
     toolName: finalized.toolCall.name,
-    text: finalized.result.content ?? "",  // Pi L782-784：content ?? []，null 不进历史/provider
+    text: finalized.result.content ?? "",  // Pi L782-784: content ?? [], null never reaches history/provider
     isError: finalized.isError,
     ...(finalized.result.details !== undefined ? { details: finalized.result.details } : {}),
     ...(finalized.result.usage !== undefined ? { usage: finalized.result.usage } : {}),
@@ -210,7 +210,7 @@ export async function emitToolResultMessage(
   return { message, terminate: finalized.result.terminate === true };
 }
 
-/** 立即失败收尾：end 事件 + 消息事件（Pi L454-459 串行路径 / L508-519 并行路径）。 */
+/** Wrap up an immediate failure: end event + message event (Pi L454-459 serial path / L508-519 parallel path). */
 async function immediate(toolCall: ToolCall, text: string, terminate: boolean, emit: AgentEventSink): Promise<ImmediateToolOutcome> {
   const message: Message = {
     role: "toolResult",
@@ -220,8 +220,8 @@ async function immediate(toolCall: ToolCall, text: string, terminate: boolean, e
     isError: true,
     ...(terminate ? { terminate: true } : {}),
   };
-  // Pi 并行 L508-519：immediate 只发 end（完成顺序）；消息事件由执行路径按序发
-  // （串行：随执行顺序立即发 L472-474；并行：收尾按源序统一发 L543-548）
+  // Pi parallel L508-519: immediate emits only end (completion order); the execution path emits message events in order
+  // (serial: emitted immediately in execution order L472-474; parallel: emitted together in source order at wrap-up L543-548)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result: { content: text }, isError: true });
   return { kind: "immediate", message, terminate };
 }

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 08 章：Context Compaction（上下文压缩，Part II Reduce it）",
+  "description": "learn-pi-agent Chapter 08: Context Compaction (shrinking the context, Part II Reduce it)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
