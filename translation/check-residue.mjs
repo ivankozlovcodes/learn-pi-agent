@@ -13,7 +13,8 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HAN = /\p{Script=Han}/u;
+// Han characters, plus CJK/full-width punctuation that should be ASCII in English text.
+const HAN = /[\p{Script=Han}\u3000-\u303F\uFF01-\uFF1F\uFF3B-\uFF40\uFF5B-\uFF65]/u;
 const MAX_LINE = 120;
 const SKIPPED_DIR_PREFIXES = ['node_modules/', 'dist/', 'website/.vitepress/cache/', 'website/.vitepress/dist/'];
 const SKIPPED_DIR_SEGMENTS = ['/node_modules/', '/dist/', '/.vitepress/cache/', '/.vitepress/dist/'];
