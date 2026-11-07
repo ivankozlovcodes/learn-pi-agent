@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 01 章：Tool Calling（最小 Agent Loop）",
+  "description": "learn-pi-agent Chapter 01: Tool Calling (minimal Agent Loop)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",
