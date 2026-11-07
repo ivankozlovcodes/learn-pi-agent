@@ -1,33 +1,33 @@
 /**
- * 07 章 Phase 2：Entry 树 JSONL 持久化（对应 coding-agent v3 文件格式，docs/session-format.md）。
+ * Chapter 07 Phase 2: Entry tree JSONL persistence (maps to the coding-agent v3 file format, docs/session-format.md).
  *
- * 与 Phase 1（session.ts）的格式演进：
- * - v1（Phase 1 脚手架）：头行 + 消息行，线性；
- * - v2（本文件）：头行 + entry 行，id/parentId 成树，原地分支不建新文件。
- * Pi 的版本演进相同（session-format.md：Version 1 linear → Version 2 tree）。
+ * Format evolution from Phase 1 (session.ts):
+ * - v1 (Phase 1 scaffold): header line + message lines, linear;
+ * - v2 (this file): header line + entry lines, id/parentId form a tree, branching in place without a new file.
+ * Pi's version history is the same (session-format.md: Version 1 linear → Version 2 tree).
  *
- * 容错沿用 Phase 1：损坏行跳过继续、缺尾换行 append 先补换行；
- * Pi 的原子修复（harness/session/jsonl/storage.ts L86-106 torn tail 重写）教学不展开。
+ * Fault tolerance carries over from Phase 1: skip corrupted lines and continue; add the missing trailing newline before append;
+ * Pi's atomic repair (harness/session/jsonl/storage.ts L86-106 torn tail rewrite) is not covered here.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { TreeSession, type Entry } from "./session-tree.ts";
 
-/** 会话头（v2 = Entry 树格式）。 */
+/** Session header (v2 = Entry tree format). */
 export interface TreeSessionHeader {
   version: 2;
   systemPrompt: string;
   model: string;
 }
 
-/** 追加 entry 行到会话文件（Pi JsonlSessionRepo append 语义 + Phase 1 容错）。 */
+/** Append entry lines to the session file (Pi JsonlSessionRepo append semantics + Phase 1 fault tolerance). */
 export function appendEntries(file: string, header: TreeSessionHeader, entries: Entry[]): void {
   const lines: string[] = [];
-  // 文件存在且非空才算「已有会话」；空文件（如 clearSession 后）需要重新写头
+  // Only an existing, non-empty file counts as an "existing session"; an empty file (e.g. after clearSession) needs the header written again
   const hasContent = existsSync(file) && readFileSync(file, "utf-8").trim() !== "";
   if (!hasContent) {
     lines.push(JSON.stringify(header));
   } else {
-    // 文件存在但缺尾换行（崩溃截断等）时先补换行，避免与下一行合并成损坏 JSON
+    // If the file exists but lacks a trailing newline (crash truncation etc.), add one first so it doesn't merge with the next line into corrupted JSON
     const existing = readFileSync(file, "utf-8");
     if (!existing.endsWith("\n")) {
       writeFileSync(file, "\n", { flag: "a" });
@@ -39,7 +39,7 @@ export function appendEntries(file: string, header: TreeSessionHeader, entries: 
   writeFileSync(file, lines.join("\n") + "\n", { flag: "a" });
 }
 
-/** 从会话文件恢复树（头 + entry 行；文件不存在/头损坏返回 null）。leaf = 最后一条 entry（Pi _buildIndex L959）。 */
+/** Restore the tree from the session file (header + entry lines; returns null if the file is missing or the header is corrupted). leaf = the last entry (Pi _buildIndex L959). */
 export function loadTree(file: string): { header: TreeSessionHeader; tree: TreeSession } | null {
   if (!existsSync(file)) {
     return null;
@@ -52,18 +52,18 @@ export function loadTree(file: string): { header: TreeSessionHeader; tree: TreeS
   try {
     header = JSON.parse(lines[0]) as TreeSessionHeader;
     if (typeof header?.systemPrompt !== "string" || header?.version !== 2) {
-      return null; // header 损坏（非 v2 会话文件或写了一半）→ 不可恢复
+      return null; // corrupted header (not a v2 session file, or half-written) → can't restore
     }
   } catch {
     return null;
   }
-  // 逐行容错，损坏行跳过，不让单行问题杀死整个会话
+  // Per-line fault tolerance: skip corrupted lines, so one bad line doesn't kill the whole session
   const entries: Entry[] = [];
   for (const line of lines.slice(1)) {
     try {
       entries.push(JSON.parse(line) as Entry);
     } catch {
-      console.warn("会话文件存在损坏行，已跳过:", line.slice(0, 60));
+      console.warn("Session file has a corrupted line, skipped:", line.slice(0, 60));
     }
   }
   const tree = new TreeSession();

@@ -1,9 +1,9 @@
 /**
- * 07 章测试（Phase 2）：Entry 树会话。
- * 覆盖：append 后 leaf 移动、fork 双支隔离、navigate 回溯、向根查询、custom entry、
- * getTree/getChildren、JSONL round-trip 与容错、分支后继续对话集成、
- * 恢复后 leaf 正确、树价值（状态从分支路径推导）。
- * 流式 mock LLM 驱动（离线）。
+ * Chapter 07 tests (Phase 2): Entry tree session.
+ * Covers: leaf moves after append, fork isolates two branches, navigate back, walk toward the root, custom entry,
+ * getTree/getChildren, JSONL round-trip and fault tolerance, integration of continuing a conversation after branching,
+ * correct leaf after restore, the value of the tree (state derived from the branch path).
+ * Driven by a streaming mock LLM (offline).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -16,7 +16,7 @@ import type { LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AssistantMessageEvent, Message, Tool } from "../../00-minimal-llm-call/src/index.ts";
 import { createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 流式 mock LLM：步骤用尽后重复最后一步。 */
+/** Streaming mock LLM: repeats the last step once the steps run out. */
 class ScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -54,7 +54,7 @@ function toolStream(calls: { id: string; name: string; args: Record<string, unkn
 
 function makeAgent(llm: LLMAdapter, initialMessages?: Message[], tools: Tool[] = [createCalculatorTool()]): Agent {
   return new Agent({
-    systemPrompt: "助手",
+    systemPrompt: "assistant",
     tools,
     llm,
     config: { model: "m" },
@@ -63,21 +63,21 @@ function makeAgent(llm: LLMAdapter, initialMessages?: Message[], tools: Tool[] =
 }
 
 /**
- * 把 Agent 的新增消息写进树并落盘（Pi AgentSession 的 message_end → appendMessage 模式）。
- * 新增消息 = agent.state.messages 中超出「当前分支消息数」的部分。
+ * Write the Agent's new messages into the tree and persist them to disk (the Pi AgentSession message_end → appendMessage pattern).
+ * New messages = the part of agent.state.messages beyond the "current branch message count".
  */
 function persist(tree: TreeSession, agent: Agent, file: string): void {
   const before = tree.getMessages().length;
   const entries = agent.state.messages.slice(before).map((m) => tree.appendMessage(m));
-  appendEntries(file, { version: 2, systemPrompt: "助手", model: "m" }, entries);
+  appendEntries(file, { version: 2, systemPrompt: "assistant", model: "m" }, entries);
 }
 
-/** 计数器工具：状态存 tool result details，reconstruct 从分支路径推导（todo.ts 机制的最小版）。 */
+/** Counter tool: state is stored in tool result details, and reconstruct derives it from the branch path (a minimal version of the todo.ts mechanism). */
 function createCounterTool(): Tool & { count: number; reconstruct: (entries: Entry[]) => void } {
   const tool = {
     count: 0,
     name: "counter",
-    description: "计数器",
+    description: "Counter",
     parameters: { type: "object", properties: {} },
     async execute() {
       tool.count += 1;
@@ -98,74 +98,74 @@ function createCounterTool(): Tool & { count: number; reconstruct: (entries: Ent
   return tool;
 }
 
-/** 临时会话文件（afterEach 统一清理）。 */
+/** Temporary session file (cleaned up in afterEach). */
 let tempRoot: string | undefined;
 function tempFile(): string {
   tempRoot ??= mkdtempSync(join(tmpdir(), "lpia-07-"));
   return join(tempRoot, "session.jsonl");
 }
 
-describe("Entry 树（07 章 Phase 2）", () => {
-  it("append 后 leaf 移动：新 entry 成为 leaf，parentId 挂到当前 leaf（Pi _appendEntry L1045-1050）", () => {
+describe("Entry tree (Chapter 07 Phase 2)", () => {
+  it("leaf moves after append: the new entry becomes the leaf, with parentId pointing at the current leaf (Pi _appendEntry L1045-1050)", () => {
     const tree = new TreeSession();
-    const e1 = tree.appendMessage({ role: "user", text: "你好" });
+    const e1 = tree.appendMessage({ role: "user", text: "hello" });
     expect(tree.getLeafId()).toBe(e1.id);
-    expect(e1.parentId).toBeNull(); // 首条 entry 是根
-    const e2 = tree.appendMessage({ role: "assistant", text: "回复" });
+    expect(e1.parentId).toBeNull(); // the first entry is the root
+    const e2 = tree.appendMessage({ role: "assistant", text: "reply" });
     expect(tree.getLeafId()).toBe(e2.id);
     expect(e2.parentId).toBe(e1.id);
   });
 
-  it("fork 双支隔离：branch 回历史点 append 出新支，两支互不污染（Pi branch L1361-1366）", () => {
+  it("fork isolates two branches: branch back to a history point and append a new branch; the branches don't pollute each other (Pi branch L1361-1366)", () => {
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "A1" });
-    const a1 = tree.appendMessage({ role: "assistant", text: "A 回复" });
-    tree.branch(u1.id); // 分叉到根
+    const a1 = tree.appendMessage({ role: "assistant", text: "A reply" });
+    tree.branch(u1.id); // fork at the root
     const b1 = tree.appendMessage({ role: "user", text: "B1" });
-    const b2 = tree.appendMessage({ role: "assistant", text: "B 回复" });
-    // leaf 在 B 支
+    const b2 = tree.appendMessage({ role: "assistant", text: "B reply" });
+    // leaf is on branch B
     expect(tree.getLeafId()).toBe(b2.id);
-    // 两支路径互不污染
+    // the two branch paths don't pollute each other
     expect(tree.getBranch(a1.id).map((e) => e.id)).toEqual([u1.id, a1.id]);
     expect(tree.getBranch().map((e) => e.id)).toEqual([u1.id, b1.id, b2.id]);
-    // A 支没有 B 的 entry
+    // branch A has none of B's entries
     expect(tree.getChildren(u1.id).map((e) => e.id)).toEqual([a1.id, b1.id]);
   });
 
-  it("navigate：切到历史 entry 后 leaf 正确，再从该点 append 生成新子支", () => {
+  it("navigate: leaf is correct after switching to a history entry, and appending from there creates a new child branch", () => {
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "Q" });
     const a1 = tree.appendMessage({ role: "assistant", text: "R1" });
     const a2 = tree.appendMessage({ role: "assistant", text: "R2" });
-    tree.branch(a1.id); // 切到历史 entry
+    tree.branch(a1.id); // switch to a history entry
     expect(tree.getLeafId()).toBe(a1.id);
     const a3 = tree.appendMessage({ role: "assistant", text: "R3" });
     expect(a3.parentId).toBe(a1.id);
     expect(tree.getLeafId()).toBe(a3.id);
-    expect(tree.getEntry(a2.id)).toBeDefined(); // 原路径 R2 仍在（append-only，不删除）
+    expect(tree.getEntry(a2.id)).toBeDefined(); // R2 on the original path is still there (append-only, nothing deleted)
   });
 
-  it("getBranch 向根查询（root→leaf 顺序）；branch 不存在的 entry 抛错", () => {
+  it("getBranch walks toward the root (root→leaf order); branching to a missing entry throws", () => {
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "Q" });
     const a1 = tree.appendMessage({ role: "assistant", text: "R" });
-    expect(tree.getBranch().map((e) => e.id)).toEqual([u1.id, a1.id]); // 默认从 leaf 起
+    expect(tree.getBranch().map((e) => e.id)).toEqual([u1.id, a1.id]); // starts from the leaf by default
     expect(tree.getBranch(u1.id).map((e) => e.id)).toEqual([u1.id]);
-    expect(() => tree.branch("nope")).toThrow("not found"); // Pi L1361-1366 校验
+    expect(() => tree.branch("nope")).toThrow("not found"); // Pi L1361-1366 validation
   });
 
-  it("custom entry：入树、leaf 前进、不参与消息路径（Pi CustomEntry，不进 LLM 上下文）", () => {
+  it("custom entry: joins the tree, advances the leaf, stays out of the message path (Pi CustomEntry, not in the LLM context)", () => {
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "Q" });
     const c1 = tree.appendCustomEntry("todo", { count: 1 });
     expect(tree.getEntry(c1.id)).toBeDefined();
     expect(c1.parentId).toBe(u1.id);
     expect(tree.getLeafId()).toBe(c1.id);
-    expect(tree.getMessages()).toHaveLength(1); // custom 不产消息
+    expect(tree.getMessages()).toHaveLength(1); // custom produces no messages
     expect(tree.getMessages()[0]).toMatchObject({ role: "user", text: "Q" });
   });
 
-  it("getTree：多支结构正确、孤儿 entry 当根、children 按 timestamp 排序（Pi L1311-1349）", () => {
+  it("getTree: correct multi-branch structure, orphan entries become roots, children sorted by timestamp (Pi L1311-1349)", () => {
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "Q" });
     tree.appendMessage({ role: "assistant", text: "R1" });
@@ -173,93 +173,93 @@ describe("Entry 树（07 章 Phase 2）", () => {
     const b1 = tree.appendMessage({ role: "assistant", text: "R2" });
     const roots = tree.getTree();
     expect(roots).toHaveLength(1);
-    expect(roots[0].children.map((c) => c.entry.id)).toEqual([tree.getChildren(u1.id)[0].id, b1.id]); // 按 timestamp
-    // 孤儿当根：parent 缺失的 entry 独立成根（Pi L1332-1335）
+    expect(roots[0].children.map((c) => c.entry.id)).toEqual([tree.getChildren(u1.id)[0].id, b1.id]); // by timestamp
+    // orphans become roots: an entry with a missing parent becomes its own root (Pi L1332-1335)
     const orphan: Entry = {
       type: "message",
       id: "o1",
       parentId: "ghost",
       timestamp: "2026-01-01T00:00:00.000Z",
-      message: { role: "user", text: "孤儿" },
+      message: { role: "user", text: "orphan" },
     };
     tree.load([...tree.getEntries(), orphan]);
     expect(tree.getTree()).toHaveLength(2);
   });
 });
 
-describe("JSONL 持久化（07 章 Phase 2）", () => {
-  it("round-trip：save → load 结构一致、leaf 正确（分支态）", () => {
+describe("JSONL persistence (Chapter 07 Phase 2)", () => {
+  it("round-trip: save → load keeps the structure and the correct leaf (branched state)", () => {
     const file = tempFile();
     const tree = new TreeSession();
     const u1 = tree.appendMessage({ role: "user", text: "A1" });
-    const a1 = tree.appendMessage({ role: "assistant", text: "A 回复" });
+    const a1 = tree.appendMessage({ role: "assistant", text: "A reply" });
     tree.branch(u1.id);
     const b1 = tree.appendMessage({ role: "user", text: "B1" });
-    appendEntries(file, { version: 2, systemPrompt: "助手", model: "m" }, tree.getEntries());
+    appendEntries(file, { version: 2, systemPrompt: "assistant", model: "m" }, tree.getEntries());
 
     const loaded = loadTree(file);
     expect(loaded).not.toBeNull();
-    expect(loaded?.header).toMatchObject({ systemPrompt: "助手", model: "m" });
+    expect(loaded?.header).toMatchObject({ systemPrompt: "assistant", model: "m" });
     expect(loaded?.tree.getEntries()).toHaveLength(3);
-    expect(loaded?.tree.getLeafId()).toBe(b1.id); // 恢复后 leaf = 最后一条 entry（Pi _buildIndex L959）
-    expect(loaded?.tree.getBranch(a1.id).map((e) => e.id)).toEqual([u1.id, a1.id]); // A 支完好
+    expect(loaded?.tree.getLeafId()).toBe(b1.id); // after restore, leaf = the last entry (Pi _buildIndex L959)
+    expect(loaded?.tree.getBranch(a1.id).map((e) => e.id)).toEqual([u1.id, a1.id]); // branch A is intact
   });
 
-  it("JSONL 容错：损坏行跳过、缺尾换行 append 先补换行", () => {
+  it("JSONL fault tolerance: skip corrupted lines; add a missing trailing newline before append", () => {
     const file = tempFile();
     const tree = new TreeSession();
-    tree.appendMessage({ role: "user", text: "第一条" });
-    const a1 = tree.appendMessage({ role: "assistant", text: "第二条" });
-    appendEntries(file, { version: 2, systemPrompt: "助手", model: "m" }, tree.getEntries());
-    // 破坏中间行：单行损坏不杀死整个会话
+    tree.appendMessage({ role: "user", text: "first" });
+    const a1 = tree.appendMessage({ role: "assistant", text: "second" });
+    appendEntries(file, { version: 2, systemPrompt: "assistant", model: "m" }, tree.getEntries());
+    // corrupt a middle line: one corrupted line doesn't kill the whole session
     const raw = readFileSync(file, "utf8");
     const lines = raw.split("\n").filter((l) => l);
     writeFileSync(file, [lines[0], "{{{broken", ...lines.slice(1)].join("\n") + "\n", "utf8");
     const loaded = loadTree(file);
-    expect(loaded?.tree.getMessages().map((m) => m.text)).toEqual(["第一条", "第二条"]);
+    expect(loaded?.tree.getMessages().map((m) => m.text)).toEqual(["first", "second"]);
     expect(loaded?.tree.getLeafId()).toBe(a1.id);
-    // 缺尾换行：外部写入后无换行 → append 先补换行，不合并损坏
+    // missing trailing newline: no newline after an external write → append adds one first, so lines don't merge into corruption
     writeFileSync(file, raw.trimEnd(), "utf8");
     const tree2 = new TreeSession();
-    tree2.load(tree.getEntries()); // 复用现有 entry，leaf 落在最后一条（追加位置正确）
-    const u2 = tree2.appendMessage({ role: "user", text: "第三条" });
-    appendEntries(file, { version: 2, systemPrompt: "助手", model: "m" }, [u2]);
+    tree2.load(tree.getEntries()); // reuse the existing entries; leaf lands on the last one (correct append position)
+    const u2 = tree2.appendMessage({ role: "user", text: "third" });
+    appendEntries(file, { version: 2, systemPrompt: "assistant", model: "m" }, [u2]);
     const loaded2 = loadTree(file);
-    expect(loaded2?.tree.getMessages().map((m) => m.text)).toEqual(["第一条", "第二条", "第三条"]);
+    expect(loaded2?.tree.getMessages().map((m) => m.text)).toEqual(["first", "second", "third"]);
   });
 
-  it("文件不存在返回 null；头损坏返回 null（不可恢复语义）", () => {
+  it("returns null when the file doesn't exist; returns null on a corrupted header (can't-restore semantics)", () => {
     const file = tempFile();
     expect(loadTree(file)).toBeNull();
-    writeFileSync(file, '{"version": 1, "systemPrompt": "x", "model": "m"}\n', "utf8"); // v1 线性头不匹配 v2
+    writeFileSync(file, '{"version": 1, "systemPrompt": "x", "model": "m"}\n', "utf8"); // a v1 linear header doesn't match v2
     expect(loadTree(file)).toBeNull();
     writeFileSync(file, "not json\n", "utf8");
     expect(loadTree(file)).toBeNull();
   });
 });
 
-describe("集成（07 章 Phase 2，scripted LLM）", () => {
-  it("分支后继续对话：切到历史 entry 重建 Agent，新分支与旧分支消息序列正确", async () => {
+describe("Integration (Chapter 07 Phase 2, scripted LLM)", () => {
+  it("continue a conversation after branching: switch to a history entry and rebuild the Agent; the new and old branches have correct message sequences", async () => {
     const file = tempFile();
     const tree = new TreeSession();
-    // 分支 A：算 1+2
+    // branch A: compute 1+2
     const agentA = makeAgent(
       new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("3")]),
     );
-    await agentA.prompt("算 1+2");
+    await agentA.prompt("compute 1+2");
     persist(tree, agentA, file);
     const a1Reply = tree.getLeafId()!;
     const branchPoint = tree.getBranch()[0].id;
-    // 分支 B：从根分叉，算 3+4
+    // branch B: fork at the root, compute 3+4
     tree.branch(branchPoint);
     const agentB = makeAgent(
       new ScriptedLlm([toolStream([{ id: "c2", name: "calculator", args: { a: 3, b: 4 } }]), textStream("7")]),
       tree.getMessages(),
     );
-    await agentB.prompt("算 3+4");
+    await agentB.prompt("compute 3+4");
     persist(tree, agentB, file);
-    // 两支隔离：同根、第二层就分叉、消息互不污染
-    // 分支 B 路径 = u1 + userB + b1(tool) + trB + b1text（5 条）；分支 A 路径 = u1 + a1(tool) + tr1 + a1text（4 条）
+    // the two branches are isolated: same root, they fork at the second level, and the messages don't pollute each other
+    // branch B path = u1 + userB + b1(tool) + trB + b1text (5 entries); branch A path = u1 + a1(tool) + tr1 + a1text (4 entries)
     expect(tree.getBranch()[0].id).toBe(branchPoint);
     expect(tree.getBranch()).toHaveLength(5);
     expect(tree.getBranch(a1Reply)).toHaveLength(4);
@@ -267,37 +267,37 @@ describe("集成（07 章 Phase 2，scripted LLM）", () => {
     expect(tree.getMessages().at(-1)).toMatchObject({ role: "assistant", text: "7" });
   });
 
-  it("保存恢复后 leaf 正确，继续对话落在原分支", async () => {
+  it("leaf is correct after save and restore, and the continued conversation lands on the original branch", async () => {
     const file = tempFile();
     const tree = new TreeSession();
-    // 分支 A
+    // branch A
     const agentA = makeAgent(
       new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("3")]),
     );
-    await agentA.prompt("算 1+2");
+    await agentA.prompt("compute 1+2");
     persist(tree, agentA, file);
     const branchPoint = tree.getBranch()[0].id;
-    // 分支 B
+    // branch B
     tree.branch(branchPoint);
     const agentB = makeAgent(
       new ScriptedLlm([toolStream([{ id: "c2", name: "calculator", args: { a: 3, b: 4 } }]), textStream("7")]),
       tree.getMessages(),
     );
-    await agentB.prompt("算 3+4");
+    await agentB.prompt("compute 3+4");
     persist(tree, agentB, file);
     const bLeaf = tree.getLeafId()!;
-    // 恢复：leaf 正确落在 B 支
+    // restore: leaf correctly lands on branch B
     const loaded = loadTree(file);
     expect(loaded).not.toBeNull();
     expect(loaded?.tree.getLeafId()).toBe(bLeaf);
-    // 继续对话落在原分支（历史从 B 支路径恢复）
-    const agentC = makeAgent(new ScriptedLlm([textStream("第二轮")]), loaded!.tree.getMessages());
-    await agentC.prompt("再来一轮");
+    // the continued conversation lands on the original branch (history restored from the branch B path)
+    const agentC = makeAgent(new ScriptedLlm([textStream("second turn")]), loaded!.tree.getMessages());
+    await agentC.prompt("one more turn");
     expect(agentC.state.messages).toHaveLength(loaded!.tree.getMessages().length + 2);
-    expect(agentC.state.messages[0]).toMatchObject({ text: "算 1+2" });
+    expect(agentC.state.messages[0]).toMatchObject({ text: "compute 1+2" });
   });
 
-  it("树价值：状态存工具结果，分支回溯后按路径推导的状态回到历史值（todo.ts 机制）", async () => {
+  it("value of the tree: state lives in tool results, and after branching back the path-derived state returns to its historical value (todo.ts mechanism)", async () => {
     const counter = createCounterTool();
     const file = tempFile();
     const tree = new TreeSession();
@@ -311,12 +311,12 @@ describe("集成（07 章 Phase 2，scripted LLM）", () => {
       undefined,
       [counter],
     );
-    await agent.prompt("计数");
+    await agent.prompt("count");
     persist(tree, agent, file);
-    await agent.prompt("再计数");
+    await agent.prompt("count again");
     persist(tree, agent, file);
     expect(counter.count).toBe(2);
-    // 分支回溯：回到第一条 counter 工具结果 entry，状态推导回 count=1
+    // branch back: return to the first counter tool result entry; the derived state goes back to count=1
     const toolResults = tree
       .getEntries()
       .filter((e) => e.type === "message" && (e as MessageEntry).message.role === "toolResult" && (e as MessageEntry).message.toolName === "counter");
@@ -324,7 +324,7 @@ describe("集成（07 章 Phase 2，scripted LLM）", () => {
     tree.branch(toolResults[0].id);
     counter.reconstruct(tree.getBranch());
     expect(counter.count).toBe(1);
-    // 回到根：状态清零
+    // back to the root: state resets to zero
     tree.branch(tree.getBranch()[0].id);
     counter.reconstruct(tree.getBranch());
     expect(counter.count).toBe(0);

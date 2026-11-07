@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "learn-pi-agent 第 07 章：Session Tree（Agent 封装 + Entry 树会话，Part II Reduce it）",
+  "description": "learn-pi-agent Chapter 07: Session Tree (Agent wrapper + Entry tree session, Part II Reduce it)",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run",

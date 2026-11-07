@@ -1,11 +1,11 @@
 /**
- * 真实 API 演示：Agent 封装 + Entry 树会话（07 章 Phase 2）。
- * 流程：分支 A 提问 → resetLeaf（Pi navigateTree 对 root user 的语义：重写首条提问 = leaf 移到其 parent）
- * → 分支 B 全新根提问 → 结构断言 → 文件恢复（leaf = 分支 B）→ branch-at 切回分支 A 继续 → 打印树。
- * 原语选择锚定 Pi 产品层语义（agent-session.ts L3208-3249）：
- * 重写一条 user 提问用 resetLeaf（root 特例）；从 assistant/toolResult 等已有状态继续用 branch。
- * 前置条件：可用的 LLM API 凭据；模型经环境变量 CLAUDE_MODEL 指定。
- * 运行：npm run demo
+ * Real API demo: Agent wrapper + Entry tree session (Chapter 07 Phase 2).
+ * Flow: ask on branch A → resetLeaf (Pi navigateTree semantics for a root user: rewriting the first question = moving the leaf to its parent)
+ * → ask on branch B from a brand-new root → structural assertions → restore from file (leaf = branch B) → branch-at back to branch A and continue → print the tree.
+ * The choice of primitive is anchored in Pi's product-layer semantics (agent-session.ts L3208-3249):
+ * rewriting a user question uses resetLeaf (the root special case); continuing from an existing state such as assistant/toolResult uses branch.
+ * Prerequisites: working LLM API credentials; the model is set via the CLAUDE_MODEL environment variable.
+ * Run: npm run demo
  */
 import { AnthropicLlmAdapter, createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
 import type { Message } from "../../00-minimal-llm-call/src/index.ts";
@@ -15,9 +15,9 @@ import { appendEntries, loadTree } from "./jsonl.ts";
 import { TreeSession, type Entry, type MessageEntry, type TreeNode } from "./session-tree.ts";
 
 const SESSION_FILE = "/tmp/learn-pi-agent-demo-session-tree.jsonl";
-const HEADER = { version: 2 as const, systemPrompt: "你是一个计算助手，回答要简洁。", model: "" };
+const HEADER = { version: 2 as const, systemPrompt: "You are a calculation assistant. Keep answers concise.", model: "" };
 
-/** 一次完整回合：以当前分支路径为 initialMessages 重建 Agent，结束后把新消息写进树并落盘。 */
+/** One full turn: rebuild the Agent with the current branch path as initialMessages, then write the new messages into the tree and persist them to disk. */
 async function runTurn(tree: TreeSession, input: string): Promise<void> {
   const agent = new Agent({
     systemPrompt: HEADER.systemPrompt,
@@ -27,10 +27,10 @@ async function runTurn(tree: TreeSession, input: string): Promise<void> {
     initialMessages: tree.getMessages(),
   });
   agent.subscribe((event) => {
-    if (event.type === "turn_start") console.log("-- 回合开始");
-    if (event.type === "tool_execution_end") console.log(`· 工具: ${event.toolName} → ${event.result.content}`);
+    if (event.type === "turn_start") console.log("-- turn start");
+    if (event.type === "tool_execution_end") console.log(`· tool: ${event.toolName} → ${event.result.content}`);
     if (event.type === "message_end" && event.message.role === "assistant" && event.message.text) {
-      console.log(`· 回复: ${event.message.text}`);
+      console.log(`· reply: ${event.message.text}`);
     }
   });
   const before = tree.getMessages().length;
@@ -39,12 +39,12 @@ async function runTurn(tree: TreeSession, input: string): Promise<void> {
   appendEntries(SESSION_FILE, HEADER, entries);
 }
 
-/** 树结构文本渲染（缩进 + leaf 标记）。 */
+/** Text rendering of the tree structure (indentation + leaf marker). */
 function renderTree(tree: TreeSession, node: TreeNode, depth: number, out: string[]): void {
   const e = node.entry;
   const label =
     e.type === "message"
-      ? `${(e as MessageEntry).message.role}: ${((e as MessageEntry).message.text ?? "(工具调用)").slice(0, 30)}`
+      ? `${(e as MessageEntry).message.role}: ${((e as MessageEntry).message.text ?? "(tool call)").slice(0, 30)}`
       : `custom(${(e as Entry & { customType: string }).customType})`;
   const leafMark = e.id === tree.getLeafId() ? " ← leaf" : "";
   out.push("  ".repeat(depth) + `${e.id} [${label}]${leafMark}`);
@@ -53,10 +53,10 @@ function renderTree(tree: TreeSession, node: TreeNode, depth: number, out: strin
   }
 }
 
-/** 程序化断言：demo 自带结构自检，失败即抛错退出（不依赖具体模型文本或固定 entry 数量）。 */
+/** Programmatic assertions: the demo checks its own structure and throws on failure (independent of the exact model text or a fixed entry count). */
 function check(condition: boolean, label: string): void {
   if (!condition) {
-    throw new Error(`结构断言失败: ${label}`);
+    throw new Error(`Structural assertion failed: ${label}`);
   }
   console.log(`✓ ${label}`);
 }
@@ -64,73 +64,73 @@ function check(condition: boolean, label: string): void {
 async function main(): Promise<void> {
   const model = process.env.CLAUDE_MODEL;
   if (!model) {
-    throw new Error("请设置 CLAUDE_MODEL 环境变量指定要使用的模型");
+    throw new Error("Set the CLAUDE_MODEL environment variable to the model to use");
   }
   HEADER.model = model;
 
-  console.log("=== Phase 1（session.ts 线性）===");
-  console.log("线性 JSONL 只能顺序追加：想回到第 1 条消息继续，只能复制文件再截断；分支需另开文件。");
-  console.log("升级：Entry{id,parentId} 树（session-tree.ts + jsonl.ts），分支只移 leaf 指针。\n");
+  console.log("=== Phase 1 (session.ts, linear) ===");
+  console.log("Linear JSONL can only append in order: to go back to message 1 and continue, you must copy the file and truncate it; a branch needs another file.");
+  console.log("Upgrade: an Entry{id,parentId} tree (session-tree.ts + jsonl.ts); branching only moves the leaf pointer.\n");
 
-  console.log("=== 会话：Entry 树（分支 A / 全新分支 B / branch-at 继续 / 恢复）===");
+  console.log("=== Session: Entry tree (branch A / brand-new branch B / branch-at continue / restore) ===");
   const tree = new TreeSession();
 
-  // 分支 A：提问，记录 root 与最新回复（后者是 branch-at 的合法目标：非 user entry）
-  console.log("\n[分支 A] 第一问：");
-  await runTurn(tree, "请计算 12 + 30 等于多少？");
+  // Branch A: ask, and record the root and the latest reply (the latter is a valid branch-at target: a non-user entry)
+  console.log("\n[branch A] first question:");
+  await runTurn(tree, "What is 12 + 30?");
   const branchARootId = tree.getBranch()[0].id;
   const branchAReplyId = tree.getLeafId()!;
   const branchAPathIds = tree.getBranch().map((e) => e.id);
   const entriesBeforeReset = tree.getEntries().length;
 
-  // 全新问题：Pi navigateTree 对 user 目标 = leaf 移到 target.parentId（root user → null），文本进编辑器重写。
-  // 教学没有 editor 编排，用 resetLeaf() 表达同一语义——分支 B 不共享 A 的 root user。
-  console.log("\n[分支 B] 全新问题（resetLeaf，不共享 A 的 root user）：");
+  // Brand-new question: Pi navigateTree on a user target = move the leaf to target.parentId (root user → null), and the text goes into the editor to be rewritten.
+  // The teaching version has no editor orchestration, so resetLeaf() expresses the same semantics: branch B doesn't share A's root user.
+  console.log("\n[branch B] brand-new question (resetLeaf, doesn't share A's root user):");
   tree.resetLeaf();
-  check(tree.getLeafId() === null, "resetLeaf 后 leaf 为空");
-  check(tree.getEntries().length === entriesBeforeReset, "resetLeaf 不删改任何已有 entry");
+  check(tree.getLeafId() === null, "leaf is empty after resetLeaf");
+  check(tree.getEntries().length === entriesBeforeReset, "resetLeaf doesn't delete or change any existing entry");
 
-  await runTurn(tree, "请计算 100 - 40 等于多少？");
+  await runTurn(tree, "What is 100 - 40?");
   const branchBLeafId = tree.getLeafId()!;
   const branchBPathIds = tree.getBranch().map((e) => e.id);
 
-  check(tree.getEntry(branchBPathIds[0])?.parentId === null, "分支 B 首条 entry 成为新根（parentId === null）");
-  check(branchBPathIds[0] !== branchARootId, "分支 B 根 ≠ 分支 A 根");
-  check(branchBPathIds.every((id) => !branchAPathIds.includes(id)), "分支 B 路径与 A 零共享（不含 A 的 root user 与回复）");
-  check(tree.getBranch(branchAReplyId).map((e) => e.id).join() === branchAPathIds.join(), "分支 A 原路径仍可完整重建");
-  check(tree.getEntries().length === entriesBeforeReset + branchBPathIds.length, "A/B 两支同在一个 append-only entry 集合");
+  check(tree.getEntry(branchBPathIds[0])?.parentId === null, "branch B's first entry becomes a new root (parentId === null)");
+  check(branchBPathIds[0] !== branchARootId, "branch B root ≠ branch A root");
+  check(branchBPathIds.every((id) => !branchAPathIds.includes(id)), "branch B path shares nothing with A (not A's root user nor its reply)");
+  check(tree.getBranch(branchAReplyId).map((e) => e.id).join() === branchAPathIds.join(), "branch A's original path can still be fully rebuilt");
+  check(tree.getEntries().length === entriesBeforeReset + branchBPathIds.length, "branches A and B live in the same append-only entry set");
 
-  // 落盘 → 恢复：leaf = 最后 append 的分支 B
+  // Persist → restore: leaf = branch B, the last one appended
   const loaded = loadTree(SESSION_FILE);
   if (!loaded) {
-    throw new Error("会话恢复失败");
+    throw new Error("Session restore failed");
   }
-  console.log("\n=== 从文件恢复 ===");
-  check(loaded.tree.getLeafId() === branchBLeafId, "恢复后 active leaf = 最后 append 的分支 B");
-  check(loaded.tree.getBranch().map((e) => e.id).join() === branchBPathIds.join(), "恢复后重建 = 仅分支 B 路径");
-  check(loaded.tree.getBranch(branchAReplyId).map((e) => e.id).join() === branchAPathIds.join(), "旧分支 A 仍可通过其 leaf id 重建");
+  console.log("\n=== Restore from file ===");
+  check(loaded.tree.getLeafId() === branchBLeafId, "after restore, active leaf = branch B, the last one appended");
+  check(loaded.tree.getBranch().map((e) => e.id).join() === branchBPathIds.join(), "after restore, the rebuild = only the branch B path");
+  check(loaded.tree.getBranch(branchAReplyId).map((e) => e.id).join() === branchAPathIds.join(), "old branch A can still be rebuilt from its leaf id");
 
-  // 切回分支 A 继续：目标是 assistant 回复（非 user entry）→ branch AT，目标保留在新路径中
-  console.log("\n[分支 A] branch-at 继续（目标为 assistant 回复）：");
+  // Switch back to branch A and continue: the target is an assistant reply (not a user entry) → branch AT, the target stays on the new path
+  console.log("\n[branch A] branch-at continue (target is an assistant reply):");
   tree.branch(branchAReplyId);
-  await runTurn(tree, "很好，再算一下 5 * 3 等于多少？");
-  check(tree.getBranch(branchBLeafId).map((e) => e.id).join() === branchBPathIds.join(), "A 支继续后，分支 B 路径原样未动");
+  await runTurn(tree, "Good. Now what is 5 * 3?");
+  check(tree.getBranch(branchBLeafId).map((e) => e.id).join() === branchBPathIds.join(), "after continuing branch A, the branch B path is untouched");
 
-  // 树结构与 leaf（双根并存：分支 A 根 + 分支 B 根）
+  // Tree structure and leaf (two roots side by side: branch A root + branch B root)
   const out: string[] = [];
   for (const node of tree.getTree()) {
     renderTree(tree, node, 0, out);
   }
-  console.log("\n=== 树结构（分支 A/B 并存，双根）===");
+  console.log("\n=== Tree structure (branches A/B side by side, two roots) ===");
   console.log(out.join("\n"));
   console.log(`leaf: ${tree.getLeafId()}`);
 }
 
 main()
   .finally(() => {
-    clearSession(SESSION_FILE); // finally 先于 catch，保证失败路径也清理会话文件
+    clearSession(SESSION_FILE); // finally runs before catch, so the failure path also cleans up the session file
   })
   .catch((error: unknown) => {
-    console.error("\n演示失败:", error instanceof Error ? error.message : String(error));
+    console.error("\nDemo failed:", error instanceof Error ? error.message : String(error));
     process.exit(1);
   });

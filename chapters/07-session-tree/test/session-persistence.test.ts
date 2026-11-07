@@ -1,7 +1,7 @@
 /**
- * 07 章测试（Phase 1）：Agent 封装（状态机/prompt/continue/subscribe）与线性 JSONL 会话脚手架。
- * Entry 树会话的测试见 session-tree.test.ts（Phase 2）。
- * 流式 mock LLM 驱动（离线）。
+ * Chapter 07 tests (Phase 1): Agent wrapper (state machine/prompt/continue/subscribe) and the linear JSONL session scaffold.
+ * Tests for the Entry tree session are in session-tree.test.ts (Phase 2).
+ * Driven by a streaming mock LLM (offline).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +13,7 @@ import type { LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AgentEvent, AssistantMessage, AssistantMessageEvent, Message } from "../../00-minimal-llm-call/src/index.ts";
 import { createCalculatorTool } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 流式 mock LLM：步骤用尽后重复最后一步。 */
+/** Streaming mock LLM: repeats the last step once the steps run out. */
 class ScriptedLlm implements LLMAdapter {
   private steps: (AssistantMessageEvent[])[];
   private next = 0;
@@ -51,7 +51,7 @@ function toolStream(calls: { id: string; name: string; args: Record<string, unkn
 
 function makeAgent(llm: LLMAdapter, initialMessages?: Message[]): Agent {
   return new Agent({
-    systemPrompt: "助手",
+    systemPrompt: "assistant",
     tools: [createCalculatorTool()],
     llm,
     config: { model: "m" },
@@ -59,15 +59,15 @@ function makeAgent(llm: LLMAdapter, initialMessages?: Message[]): Agent {
   });
 }
 
-/** 临时会话文件。 */
+/** Temporary session file. */
 function tempFile(): string {
   return join(mkdtempSync(join(tmpdir(), "lpia-07-")), "session.jsonl");
 }
 
-describe("Agent 封装（07 章）", () => {
-  it("prompt 后 state.messages 完整累积（事件驱动，Pi processEvents）", async () => {
+describe("Agent wrapper (Chapter 07)", () => {
+  it("state.messages fully accumulates after prompt (event-driven, Pi processEvents)", async () => {
     const agent = makeAgent(new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("3")]));
-    await agent.prompt("算 1+2");
+    await agent.prompt("compute 1+2");
 
     expect(agent.state.messages.length).toBe(4); // user + assistant(tool_use) + toolResult + assistant
     expect(agent.state.messages[3]).toMatchObject({ role: "assistant", text: "3" });
@@ -75,20 +75,20 @@ describe("Agent 封装（07 章）", () => {
     expect(agent.state.errorMessage).toBeUndefined();
   });
 
-  it("isStreaming 生命周期：run 期间为 true，结束后 false", async () => {
-    const agent = makeAgent(new ScriptedLlm([textStream("完成")]));
+  it("isStreaming lifecycle: true during the run, false after it ends", async () => {
+    const agent = makeAgent(new ScriptedLlm([textStream("done")]));
     const streamingStates: boolean[] = [];
     agent.subscribe((event) => {
       if (event.type === "message_start") streamingStates.push(agent.state.isStreaming);
     });
     await agent.prompt("hi");
 
-    expect(streamingStates).toEqual([true, true]); // prompt 消息 + assistant 消息都在 run 期间
+    expect(streamingStates).toEqual([true, true]); // both the prompt message and the assistant message happen during the run
     expect(agent.state.isStreaming).toBe(false);
   });
 
-  it("streamingMessage 生命周期：message_start 有值，message_end 清空", async () => {
-    const agent = makeAgent(new ScriptedLlm([textStream("完成")]));
+  it("streamingMessage lifecycle: set at message_start, cleared at message_end", async () => {
+    const agent = makeAgent(new ScriptedLlm([textStream("done")]));
     const seen: (Message | undefined)[] = [];
     agent.subscribe((event) => {
       if (event.type === "message_start" || event.type === "message_end") {
@@ -97,11 +97,11 @@ describe("Agent 封装（07 章）", () => {
     });
     await agent.prompt("hi");
 
-    expect(seen[0]).toBeDefined(); // message_start 时 streamingMessage 有值
-    expect(seen[1]).toBeUndefined(); // message_end 时清空
+    expect(seen[0]).toBeDefined(); // streamingMessage is set at message_start
+    expect(seen[1]).toBeUndefined(); // cleared at message_end
   });
 
-  it("pendingToolCalls：tool_execution_start/end 维护集合", async () => {
+  it("pendingToolCalls: tool_execution_start/end maintain the set", async () => {
     const agent = makeAgent(new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("3")]));
     const states: number[] = [];
     agent.subscribe((event) => {
@@ -109,156 +109,156 @@ describe("Agent 封装（07 章）", () => {
         states.push(agent.state.pendingToolCalls.size);
       }
     });
-    await agent.prompt("算");
+    await agent.prompt("compute");
 
-    expect(states).toEqual([1, 0]); // start 时 1 个 pending，end 后 0 个
+    expect(states).toEqual([1, 0]); // 1 pending at start, 0 after end
   });
 
-  it("continue：末条 user/toolResult 可继续；末条 assistant 抛错（Pi L74-76）", async () => {
-    const agent = makeAgent(new ScriptedLlm([textStream("第一轮"), textStream("第二轮")]));
-    await agent.prompt("任务");
-    // 末条是 assistant → continue 抛错
+  it("continue: can continue when the last message is user/toolResult; throws when it is assistant (Pi L74-76)", async () => {
+    const agent = makeAgent(new ScriptedLlm([textStream("first turn"), textStream("second turn")]));
+    await agent.prompt("task");
+    // the last message is assistant → continue throws
     await expect(agent.continue()).rejects.toThrow("assistant");
   });
 
-  it("continue 语义：从 toolResult 末条继续（重试工具场景）", async () => {
-    // 场景：工具结果 terminate=true → 循环停在 toolResult 末条 → continue 可继续（Pi L361-410）
+  it("continue semantics: continue from a trailing toolResult (tool retry case)", async () => {
+    // Scenario: tool result terminate=true → the loop stops on a trailing toolResult → continue can proceed (Pi L361-410)
     const stopping = {
       ...createCalculatorTool(),
       async execute(args: { a: number; b: number }) {
         return { content: String(args.a + args.b), terminate: true };
       },
     };
-    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("继续后回答")]);
+    const llm = new ScriptedLlm([toolStream([{ id: "c1", name: "calculator", args: { a: 1, b: 2 } }]), textStream("answer after continue")]);
     const agent = new Agent({
-      systemPrompt: "助手",
+      systemPrompt: "assistant",
       tools: [stopping],
       llm,
       config: { model: "m" },
     });
-    await agent.prompt("算");
-    // 末条是 toolResult（terminate 停在工具结果后）
+    await agent.prompt("compute");
+    // the last message is toolResult (terminate stopped after the tool result)
     expect(agent.state.messages.at(-1)?.role).toBe("toolResult");
-    // continue：从 toolResult 末条重新询问模型
+    // continue: ask the model again from the trailing toolResult
     const results = await agent.continue();
-    expect(results.at(-1)).toMatchObject({ role: "assistant", text: "继续后回答" });
+    expect(results.at(-1)).toMatchObject({ role: "assistant", text: "answer after continue" });
   });
 
-  it("错误可观测：turn_end errorMessage → state.errorMessage", async () => {
+  it("errors are observable: turn_end errorMessage → state.errorMessage", async () => {
     const errorStep: AssistantMessageEvent[] = [
-      { type: "start", partial: { role: "assistant", stopReason: "error", errorMessage: "API 失败" } },
-      { type: "done", partial: { role: "assistant", stopReason: "error", errorMessage: "API 失败" } },
+      { type: "start", partial: { role: "assistant", stopReason: "error", errorMessage: "API failed" } },
+      { type: "done", partial: { role: "assistant", stopReason: "error", errorMessage: "API failed" } },
     ];
     const agent = makeAgent(new ScriptedLlm([errorStep]));
     await agent.prompt("hi");
 
-    expect(agent.state.errorMessage).toBe("API 失败");
+    expect(agent.state.errorMessage).toBe("API failed");
   });
 
-  it("运行失败 → handleRunFailure：失败消息入历史、errorMessage 设置、状态复位（Pi L512-526）", async () => {
+  it("run failure → handleRunFailure: failure message goes into history, errorMessage is set, state is reset (Pi L512-526)", async () => {
     const crashingLlm: LLMAdapter = {
       async *complete(): AsyncIterable<AssistantMessageEvent> {
-        throw new Error("LLM 网络中断");
+        throw new Error("LLM network interrupted");
       },
     };
     const agent = makeAgent(crashingLlm);
     const result = await agent.prompt("hi");
     expect(result).toEqual([]);
     expect(agent.state.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "error" });
-    expect(agent.state.errorMessage).toContain("LLM 网络中断");
+    expect(agent.state.errorMessage).toContain("LLM network interrupted");
     expect(agent.state.isStreaming).toBe(false);
     expect(agent.state.pendingToolCalls.size).toBe(0);
-    // continue 约束生效：失败回合末条为 assistant → 抛错（不静默放行）
+    // the continue constraint applies: the failed run ends with an assistant message → throws (not silently allowed)
     await expect(agent.continue()).rejects.toThrow("assistant");
   });
 
-  it("并发保护：prompt 进行中再次 prompt 抛错（Pi L352-356）", async () => {
+  it("concurrency guard: a second prompt while one is running throws (Pi L352-356)", async () => {
     let resolveFirst!: () => void;
     const gate = new Promise<void>((resolve) => {
       resolveFirst = resolve;
     });
     const llm: LLMAdapter = {
       async *complete() {
-        await gate; // 挂起第一个 run
+        await gate; // suspend the first run
         yield { type: "start", partial: { role: "assistant", stopReason: "end_turn" } };
-        yield { type: "done", partial: { role: "assistant", stopReason: "end_turn", text: "完成" } };
+        yield { type: "done", partial: { role: "assistant", stopReason: "end_turn", text: "done" } };
       },
     };
     const agent = makeAgent(llm);
-    const first = agent.prompt("任务一");
-    await expect(agent.prompt("任务二")).rejects.toThrow("正在处理中");
+    const first = agent.prompt("task one");
+    await expect(agent.prompt("task two")).rejects.toThrow("already processing");
     resolveFirst();
     await first;
   });
 });
 
-describe("JSONL 会话持久化（07 章）", () => {
-  it("append 后 load 恢复完整（含工具结果与 assistant 回复）", async () => {
+describe("JSONL session persistence (Chapter 07)", () => {
+  it("load after append restores everything (including tool results and assistant replies)", async () => {
     const file = tempFile();
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [
-      { role: "user", text: "算 1+2" },
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [
+      { role: "user", text: "compute 1+2" },
       { role: "assistant", text: "3" },
     ]);
 
     const loaded = loadSession(file);
-    expect(loaded?.header).toMatchObject({ systemPrompt: "助手", model: "m" });
+    expect(loaded?.header).toMatchObject({ systemPrompt: "assistant", model: "m" });
     expect(loaded?.messages).toHaveLength(2);
     expect(loaded?.messages[1]).toMatchObject({ role: "assistant", text: "3" });
   });
 
-  it("追加语义：多次 append 不覆盖已有内容", async () => {
+  it("append semantics: repeated appends don't overwrite existing content", async () => {
     const file = tempFile();
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [{ role: "user", text: "第一轮" }]);
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [{ role: "assistant", text: "回复" }]);
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [{ role: "user", text: "first turn" }]);
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [{ role: "assistant", text: "reply" }]);
 
     const loaded = loadSession(file);
-    expect(loaded?.messages.map((m) => m.text)).toEqual(["第一轮", "回复"]);
+    expect(loaded?.messages.map((m) => m.text)).toEqual(["first turn", "reply"]);
   });
 
-  it("恢复后继续对话：load → Agent(initialMessages) → prompt 多轮", async () => {
+  it("continue the conversation after restore: load → Agent(initialMessages) → prompt over several turns", async () => {
     const file = tempFile();
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [
-      { role: "user", text: "算 1+2" },
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [
+      { role: "user", text: "compute 1+2" },
       { role: "assistant", text: "3" },
     ]);
 
     const loaded = loadSession(file);
     expect(loaded).not.toBeNull();
-    const agent = makeAgent(new ScriptedLlm([textStream("历史已看到")]), loaded?.messages);
-    await agent.prompt("再来一轮");
-    expect(agent.state.messages.length).toBe(4); // 恢复 2 条 + 新 prompt + 新回复
-    expect(agent.state.messages[0]).toMatchObject({ text: "算 1+2" });
+    const agent = makeAgent(new ScriptedLlm([textStream("history seen")]), loaded?.messages);
+    await agent.prompt("one more turn");
+    expect(agent.state.messages.length).toBe(4); // 2 restored + new prompt + new reply
+    expect(agent.state.messages[0]).toMatchObject({ text: "compute 1+2" });
   });
 
-  it("JSONL 容错：中间损坏行跳过、缺尾换行 append 先补换行", async () => {
+  it("JSONL fault tolerance: skip a corrupted middle line; add a missing trailing newline before append", async () => {
     const file = tempFile();
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [
-      { role: "user", text: "第一条" },
-      { role: "assistant", text: "第二条" },
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [
+      { role: "user", text: "first" },
+      { role: "assistant", text: "second" },
     ]);
     const raw = readFileSync(file, "utf8");
-    // 破坏中间行：单行损坏不杀死整个会话
+    // corrupt a middle line: one corrupted line doesn't kill the whole session
     const lines = raw.split("\n").filter((l) => l);
     writeFileSync(file, [lines[0], "{{{broken json", ...lines.slice(1)].join("\n") + "\n", "utf8");
     const loaded = loadSession(file);
-    expect(loaded?.messages.map((m) => m.text)).toEqual(["第一条", "第二条"]);  // 损坏行跳过，其余完整恢复
-    // 缺尾换行：外部写入后无换行 → append 先补换行，不合并损坏
+    expect(loaded?.messages.map((m) => m.text)).toEqual(["first", "second"]);  // the corrupted line is skipped, the rest is fully restored
+    // missing trailing newline: no newline after an external write → append adds one first, so lines don't merge into corruption
     writeFileSync(file, raw.trimEnd(), "utf8");
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [{ role: "user", text: "第三条" }]);
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [{ role: "user", text: "third" }]);
     const loaded2 = loadSession(file);
-    expect(loaded2?.messages.map((m) => m.text)).toEqual(["第一条", "第二条", "第三条"]);
+    expect(loaded2?.messages.map((m) => m.text)).toEqual(["first", "second", "third"]);
   });
 
-  it("文件不存在时 loadSession 返回 null；clearSession 清空", async () => {
+  it("loadSession returns null when the file doesn't exist; clearSession clears it", async () => {
     const file = tempFile();
     expect(loadSession(file)).toBeNull();
-    appendToSession(file, { version: 1, systemPrompt: "助手", model: "m" }, [{ role: "user", text: "x" }]);
+    appendToSession(file, { version: 1, systemPrompt: "assistant", model: "m" }, [{ role: "user", text: "x" }]);
     clearSession(file);
     expect(loadSession(file)).toBeNull();
   });
 
   afterEach(() => {
-    // 清理临时目录
+    // clean up the temp directory
     rmSync(join(tmpdir(), "lpia-07-"), { recursive: true, force: true });
   });
 });

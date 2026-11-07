@@ -1,23 +1,23 @@
 /**
- * 07 章核心：最小 Agent 封装（Reduce it——精读 Pi `Agent` class（agent.ts L173）后的最小复刻）。
+ * Chapter 07 core: minimal Agent wrapper (Reduce it: a minimal rebuild after a close reading of the Pi `Agent` class (agent.ts L173)).
  *
- * 复刻的设计（全部锚定 Pi）：
- * - `subscribe`（L250）：事件订阅，返回退订函数
- * - `state` getter（L260，JSDoc 起 L255）：公开 AgentState（messages/isStreaming/streamingMessage/pendingToolCalls/errorMessage）
- * - `processEvents`（L540-580）：事件 → 状态机的唯一入口
- *   message_start/update → streamingMessage；message_end → streamingMessage=undefined + messages.push
- *   tool_execution_start/end → pendingToolCalls 增减；turn_end + errorMessage → errorMessage；agent_end → streamingMessage=undefined
- * - `prompt`（L350-356）：并发保护（activeRun 检查）+ runAgentLoop 接线
- * - `continue`（L361-410）：末条必须是 user/toolResult（Pi L74-76 语义）
+ * The rebuilt design (all anchored in Pi):
+ * - `subscribe` (L250): event subscription, returns an unsubscribe function
+ * - `state` getter (L260, JSDoc from L255): the public AgentState (messages/isStreaming/streamingMessage/pendingToolCalls/errorMessage)
+ * - `processEvents` (L540-580): the single entry point from events → state machine
+ *   message_start/update → streamingMessage; message_end → streamingMessage=undefined + messages.push
+ *   tool_execution_start/end → add/remove pendingToolCalls; turn_end + errorMessage → errorMessage; agent_end → streamingMessage=undefined
+ * - `prompt` (L350-356): concurrency guard (activeRun check) + runAgentLoop wiring
+ * - `continue` (L361-410): the last message must be user/toolResult (Pi L74-76 semantics)
  *
- * 剪裁（教学简化）：steering/followUp 队列与 QueueMode、abort/waitForIdle、thinkingLevel 替换。
- * session 持久化见 session.ts（对应 Pi harness/session 的 JsonlSessionRepo 最小版）。
+ * Trimmed for teaching: steering/followUp queues and QueueMode, abort/waitForIdle, thinkingLevel replacement.
+ * Session persistence is in session.ts (a minimal version of Pi harness/session's JsonlSessionRepo).
  */
 import { runAgentLoop, runAgentLoopContinue, type AgentEventSink } from "./agent-loop.ts";
 import type { LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AssistantMessage, Message } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 公开状态：Pi `AgentState`（types.ts L333-358）的教学子集。 */
+/** Public state: a teaching subset of Pi `AgentState` (types.ts L333-358). */
 export interface AgentState {
   systemPrompt: string;
   model: string;
@@ -29,19 +29,19 @@ export interface AgentState {
   errorMessage?: string;
 }
 
-/** Agent 构造选项。 */
+/** Agent constructor options. */
 export interface AgentOptions {
   systemPrompt: string;
   tools: unknown[];
   llm: LLMAdapter;
   config: AgentLoopConfig;
-  /** 会话初始消息（如从 session 恢复）。 */
+  /** Initial session messages (e.g. restored from a session). */
   initialMessages?: Message[];
 }
 
 export class Agent {
   private listeners = new Set<AgentEventSink>();
-  private _state: AgentState;  // Pi 同款：字段下划线，state 为 getter（agent.ts L260）
+  private _state: AgentState;  // same as Pi: underscored field, state is a getter (agent.ts L260)
   private llm: LLMAdapter;
   private config: AgentLoopConfig;
   private activeRun: Promise<Message[]> | null = null;
@@ -59,7 +59,7 @@ export class Agent {
     };
   }
 
-  /** 订阅事件（Pi L250-253）；返回退订函数。 */
+  /** Subscribe to events (Pi L250-253); returns an unsubscribe function. */
   subscribe(listener: AgentEventSink): () => void {
     this.listeners.add(listener);
     return () => {
@@ -67,15 +67,15 @@ export class Agent {
     };
   }
 
-  /** 公开状态（Pi L260，getter 本体；JSDoc 起 L255）。 */
+  /** Public state (Pi L260, the getter body; JSDoc from L255). */
   get state(): AgentState {
     return this._state;
   }
 
-  /** 发起一次 prompt（Pi L350-356：并发保护 + runAgentLoop 接线）。 */
+  /** Start a prompt (Pi L350-356: concurrency guard + runAgentLoop wiring). */
   async prompt(input: string | Message): Promise<Message[]> {
     if (this.activeRun) {
-      throw new Error("Agent 正在处理中，请等待完成（Pi：Already processing a prompt）");
+      throw new Error("Agent is already processing; wait for it to finish (Pi: Already processing a prompt)");
     }
     const message: Message = typeof input === "string" ? { role: "user", text: input } : input;
 
@@ -90,17 +90,17 @@ export class Agent {
     }
   }
 
-  /** 从当前会话继续（Pi L361-410：末条必须是 user/toolResult，否则抛错）。 */
+  /** Continue from the current session (Pi L361-410: the last message must be user/toolResult, otherwise throw). */
   async continue(): Promise<Message[]> {
     if (this.activeRun) {
-      throw new Error("Agent 正在处理中，请等待完成");
+      throw new Error("Agent is already processing; wait for it to finish");
     }
     const last = this._state.messages[this._state.messages.length - 1];
     if (!last) {
-      throw new Error("无消息可继续（Pi：No messages to continue from）");
+      throw new Error("No messages to continue from (Pi: No messages to continue from)");
     }
     if (last.role === "assistant") {
-      throw new Error("不能从 assistant 消息继续（Pi：Cannot continue from message role: assistant）");
+      throw new Error("Cannot continue from an assistant message (Pi: Cannot continue from message role: assistant)");
     }
 
     const run = this.runWithLifecycle((emit) =>
@@ -114,7 +114,7 @@ export class Agent {
     }
   }
 
-  /** 状态 → 循环输入上下文（Pi `createContextSnapshot`）。 */
+  /** State → loop input context (Pi `createContextSnapshot`). */
   private createContext(): AgentContext {
     return {
       systemPrompt: this._state.systemPrompt,
@@ -123,12 +123,12 @@ export class Agent {
     };
   }
 
-  /** 运行生命周期：事件 → processEvents + 订阅者；isStreaming 由 run 边界控制。 */
+  /** Run lifecycle: events → processEvents + subscribers; isStreaming is controlled by the run boundary. */
   private async runWithLifecycle(
     start: (emit: AgentEventSink) => Promise<Message[]>,
   ): Promise<Message[]> {
     this._state.isStreaming = true;
-    // 每次 run 开始时清理上一轮的运行时状态（errorMessage 泄漏、幽灵 pendingToolCalls）
+    // At the start of each run, clear the previous run's runtime state (leaked errorMessage, ghost pendingToolCalls)
     this._state.errorMessage = undefined;
     this._state.pendingToolCalls = new Set<string>();
     try {
@@ -139,19 +139,19 @@ export class Agent {
         }
       });
     } catch (error) {
-      // Pi handleRunFailure（agent.ts L512-526）：异常不静默吞掉也不外抛，
-      // 失败消息入历史 + errorMessage 设置（错误可观测、末条 assistant 使 continue 约束生效）
+      // Pi handleRunFailure (agent.ts L512-526): the exception is neither silently swallowed nor rethrown;
+      // a failure message goes into history + errorMessage is set (the error is observable, and the trailing assistant message makes the continue constraint apply)
       await this.handleRunFailure(error);
       return [];
     } finally {
       this._state.isStreaming = false;
       this._state.streamingMessage = undefined;
-      // Pi finishRun（L528-536）：finally 清空 pendingToolCalls（run 异常击穿后无幽灵残留）
+      // Pi finishRun (L528-536): finally clears pendingToolCalls (no ghost leftovers after an exception breaks through the run)
       this._state.pendingToolCalls = new Set<string>();
     }
   }
 
-  /** 运行失败 → 失败消息 + 事件（Pi handleRunFailure L512-526；直接走 processEvents，不经 listeners）。 */
+  /** Run failure → failure message + events (Pi handleRunFailure L512-526; goes straight to processEvents, not through listeners). */
   private async handleRunFailure(error: unknown): Promise<void> {
     const failureMessage: AssistantMessage = {
       role: "assistant",
@@ -165,8 +165,8 @@ export class Agent {
   }
 
   /**
-   * 事件 → 状态机（Pi L540-580 精简）。
-   * 唯一入口：所有状态变化都在这里发生，外部只能读 state。
+   * Events → state machine (Pi L540-580, simplified).
+   * Single entry point: every state change happens here; outside code can only read state.
    */
   private async processEvents(event: AgentEvent): Promise<void> {
     switch (event.type) {
