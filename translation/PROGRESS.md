@@ -27,14 +27,14 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 |---|---|---|---|
 | tooling | translation/check-*.mjs, residue-allowlist, fixtures | merged | ff7f7cc→cherry-picked |
 | site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | merged | 1ed499f |
-| 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | running | |
-| 01 | chapters/01-tool-driven-agent/** | pending | |
-| 02 | chapters/02-agent-runtime/** | pending | |
-| 03 | chapters/03-tool-runtime/** | pending | |
+| 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | merged | 4c661a2 |
+| 01 | chapters/01-tool-driven-agent/** | running | |
+| 02 | chapters/02-agent-runtime/** | running | |
+| 03 | chapters/03-tool-runtime/** | running | |
 | 04 | chapters/04-parallel-tools/** | pending | |
 | 05 | chapters/05-steering-followup/** | pending | |
 | 06 | chapters/06-context-transform/** | pending | |
-| 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | pending | |
+| 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | running | |
 | 08 | chapters/08-context-compaction/** | pending | |
 | 09 | chapters/09-skills/** | pending | |
 | 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | pending | |
@@ -46,4 +46,4 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 none
 
 ## Next action
-site + 00 running. After 00 merges, launch 01, 02, 07, 03, then 04, 05, 06, 08, 09 as slots free; 10 after 07; 11 after 10; 12 after 11.
+01, 02, 03, 07 running. Next, as slots free: 04, 05, 06, 08, 09 as slots free; 10 after 07; 11 after 10; 12 after 11.
