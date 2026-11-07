@@ -2,9 +2,9 @@
  * Chapter 04 Tool Runtime: the merged Chapter 03 pipeline split into two phases (faithful to Pi's function structure).
  *
  * In Pi these are already two functions:
- * - `prepareToolCall`（L600-668）：lookup → prepareArguments → validate → beforeToolCall
+ * - `prepareToolCall` (L600-668): lookup → prepareArguments → validate → beforeToolCall
  *   returns a PreparedToolCall (executable) or an ImmediateToolCallOutcome (not found/validation failed/blocked)
- * - `executePreparedToolCall`（L670-711）+ `finalizeExecutedToolCall`（L713-758）：
+ * - `executePreparedToolCall` (L670-711)+ `finalizeExecutedToolCall` (L713-758):
  *   execute + onUpdate + afterToolCall, producing a FinalizedToolCallOutcome
  *
  * The two-phase split is a precondition for parallel execution (Pi L489-554): prepare runs serially (side-effect safe, immediate failures wrap up first),
@@ -69,7 +69,7 @@ export async function prepareToolCall(
   // tool_execution_start: Pi L445-450 emits it before prepare, with the raw arguments (not found also gets a start, so end stays paired)
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
 
-  // lookup（Pi L607）
+  // lookup (Pi L607)
   const tool = context.tools?.find((t) => t.name === toolCall.name);
   if (!tool) {
     return immediate(toolCall, `Tool ${toolCall.name} not found`, false, emit);
@@ -96,7 +96,7 @@ export async function prepareToolCall(
     return immediate(toolCall, "Operation aborted", false, emit);
   }
 
-  // beforeToolCall（Pi L619-647）
+  // beforeToolCall (Pi L619-647)
   if (config.beforeToolCall) {
     let before;
     try {

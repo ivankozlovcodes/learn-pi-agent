@@ -129,7 +129,7 @@ async function main(): Promise<void> {
   // Persist to disk: the CompactionEntry is appended to the session file like any other entry (Pi AgentSession persists automatically; in teaching the demo calls it explicitly)
   appendEntries(SESSION_FILE, HEADER, [compactionEntry]);
 
-  console.log("\n=== Reconstructed Context：buildSessionContext ===");
+  console.log("\n=== Reconstructed Context: buildSessionContext ===");
   const context = result.context;
   console.log(`before: 7 messages`);
   console.log(`after:  ${context.length} messages`);

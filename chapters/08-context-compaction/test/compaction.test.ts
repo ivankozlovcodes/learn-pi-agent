@@ -176,10 +176,10 @@ describe("findCutPoint (safe cut point)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// appendCompaction：structural invariant（additive）
+// appendCompaction: structural invariant (additive)
 // ---------------------------------------------------------------------------
 
-describe("appendCompaction（additive invariant）", () => {
+describe("appendCompaction (additive invariant)", () => {
   it("N before compact → N+1 after; all old entries present; parentId=old leaf; leaf moves forward; later appends hang under the compaction", () => {
     const tree = new TreeSession();
     tree.appendMessage({ role: "user", text: "Q1" });
@@ -208,7 +208,7 @@ describe("appendCompaction（additive invariant）", () => {
 // buildContextEntries / buildSessionContext: reconstruction projection
 // ---------------------------------------------------------------------------
 
-describe("buildContextEntries / buildSessionContext（reconstruction）", () => {
+describe("buildContextEntries / buildSessionContext (reconstruction)", () => {
   it("no compaction: fully equivalent to Chapter 07 getMessages (compatibility regression)", () => {
     const tree = new TreeSession();
     const history = buildLongHistory(tree);
@@ -395,7 +395,7 @@ describe("branch-local (compaction only affects its descendant path)", () => {
 // multiple compactions
 // ---------------------------------------------------------------------------
 
-describe("multiple compactions（latest wins）", () => {
+describe("multiple compactions (latest wins)", () => {
   it("C1/C2 both stay in the tree; reconstruction uses only the latest C2; original history all still present", () => {
     const tree = new TreeSession();
     const { u1, a1 } = buildLongHistory(tree);

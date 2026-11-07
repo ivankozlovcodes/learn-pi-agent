@@ -69,7 +69,7 @@ export async function prepareToolCall(
   // tool_execution_start: Pi L445-450 emits it before prepare, with the raw arguments (a not-found tool also gets a start, so every end has a matching start)
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
 
-  // lookup（Pi L607）
+  // lookup (Pi L607)
   const tool = context.tools?.find((t) => t.name === toolCall.name);
   if (!tool) {
     return immediate(toolCall, `Tool ${toolCall.name} not found`, false, emit);
@@ -96,7 +96,7 @@ export async function prepareToolCall(
     return immediate(toolCall, "Operation aborted", false, emit);
   }
 
-  // beforeToolCall（Pi L619-647）
+  // beforeToolCall (Pi L619-647)
   if (config.beforeToolCall) {
     let before;
     try {
