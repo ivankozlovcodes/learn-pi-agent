@@ -173,7 +173,7 @@ async function runLoop(
           hasMoreToolCalls = !shouldTerminateToolBatch(executed);
         }
       }
-      // Write history together (Pi L218-221): results from normal execution and from the truncation guard both go into context/newMessages
+      // Write back to history in one place (Pi L218-221): results from normal execution and from the truncation guard both go into context/newMessages
       for (const result of toolResults) {
         currentContext.messages.push(result);
         newMessages.push(result);

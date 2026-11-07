@@ -11,7 +11,7 @@
  *   (Pi agent-session.ts L963 _rebuildSystemPrompt → buildSystemPrompt)
  * - 10 Extension Runtime: ExtensionRunner + createExtensionAwareConfig wiring
  *   (beforeToolCall → emitToolCall interception, transformContext → emitContext injection, loadTools dynamic tools,
- *   Pi core/sdk.ts L362-367 + _installAgentToolHooks L486-522）
+ *   Pi core/sdk.ts L362-367 + _installAgentToolHooks L486-522)
  * - 11 permission-gate: the extension factory reuses the Chapter 11 implementation directly (dangerous bash is blocked in the Extension layer)
  * - product toolset: the five tools in src/tools/ (the assembly view of Pi tools/index.ts createAllToolDefinitions)
  *

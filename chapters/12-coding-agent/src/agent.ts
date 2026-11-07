@@ -6,7 +6,7 @@
  * - `subscribe` (L250): event subscription, returns an unsubscribe function
  * - `state` getter (L260, JSDoc from L255): the public AgentState (messages/isStreaming/streamingMessage/pendingToolCalls/errorMessage)
  * - `processEvents` (L540-580): the single entry point from events → state machine
- *   message_start/update → streamingMessage；message_end → streamingMessage=undefined + messages.push
+ *   message_start/update → streamingMessage; message_end → streamingMessage=undefined + messages.push
  *   tool_execution_start/end → add/remove pendingToolCalls; turn_end + errorMessage → errorMessage; agent_end → streamingMessage=undefined
  * - `prompt` (L350-356): concurrency guard (activeRun check) + runAgentLoop wiring
  * - `continue` (L361-410): the last message must be user/toolResult (Pi L74-76 semantics)

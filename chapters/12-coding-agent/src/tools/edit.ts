@@ -2,7 +2,7 @@
  * Chapter 12 product tool: edit (targeted string replacement; Pi blueprint harness/tools/edit.ts, 140 lines in full).
  *
  * Mechanisms aligned with Pi:
- * - parameters schema（Pi editSchema L28-37）：path + edits[]（oldText/newText）
+ * - parameters schema (Pi editSchema L28-37): path + edits[] (oldText/newText)
  * - compatibility layer prepareArguments (Pi L55-77): edits given as a JSON string or a single edit object are normalized to an array
  * - semantics (Pi description text): each oldText must match uniquely in the original file, with no overlaps;
  *   all edits are matched against the original file (not incrementally); overlapping/nested edits must be merged

@@ -26,7 +26,7 @@ afterAll(() => {
   for (const dir of projectDirs) rmSync(dir, { recursive: true, force: true });
 });
 
-describe("read_file（Pi harness/tools/read.ts）", () => {
+describe("read_file (Pi harness/tools/read.ts)", () => {
   it("reads file content, offset/limit slice by line", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "a.txt"), "line1\nline2\nline3\n", "utf8");
@@ -81,7 +81,7 @@ describe("read_file（Pi harness/tools/read.ts）", () => {
   });
 });
 
-describe("write_file（Pi harness/tools/write.ts）", () => {
+describe("write_file (Pi harness/tools/write.ts)", () => {
   it("write a file → reads back the same (creates parent directories automatically)", async () => {
     const cwd = tempProject();
     const tool = createWriteFileTool(cwd);
@@ -105,7 +105,7 @@ describe("write_file（Pi harness/tools/write.ts）", () => {
   });
 });
 
-describe("edit（Pi harness/tools/edit.ts）", () => {
+describe("edit (Pi harness/tools/edit.ts)", () => {
   it("targeted string replacement → correct content, details carry a line-level diff", async () => {
     const cwd = tempProject();
     writeFileSync(join(cwd, "calc.ts"), "export function add(a: number, b: number): number {\n  return a - b; // bug\n}\n", "utf8");
@@ -227,7 +227,7 @@ describe("grep (Pi coding-agent/src/core/tools/grep.ts, exists only in the produ
   });
 });
 
-describe("bash（Pi harness/tools/bash.ts + coding-agent core/tools/bash.ts）", () => {
+describe("bash (Pi harness/tools/bash.ts + coding-agent core/tools/bash.ts)", () => {
   it("executes a command and returns output (stdout and stderr merged)", async () => {
     const cwd = tempProject();
     const tool = createBashTool(cwd);

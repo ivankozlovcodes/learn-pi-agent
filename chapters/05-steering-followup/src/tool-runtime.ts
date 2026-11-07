@@ -1,14 +1,14 @@
 /**
- * Chapter 04 Tool Runtime: the merged Chapter 03 pipeline split into two phases (faithful to Pi's function structure).
+ * Chapter 04 Tool Runtime: Chapter 03's merged pipeline is split into two stages (faithful to Pi's function structure).
  *
- * In Pi these are already two functions:
+ * In Pi these are two functions to begin with:
  * - `prepareToolCall` (L600-668): lookup → prepareArguments → validate → beforeToolCall
- *   returns PreparedToolCall (executable) or ImmediateToolCallOutcome (not found / validation failed / blocked)
+ *   returns a PreparedToolCall (executable) or an ImmediateToolCallOutcome (not found / validation failed / blocked)
  * - `executePreparedToolCall` (L670-711) + `finalizeExecutedToolCall` (L713-758):
- *   execute + onUpdate + afterToolCall, producing FinalizedToolCallOutcome
+ *   execution + onUpdate + afterToolCall, producing a FinalizedToolCallOutcome
  *
- * The two-phase split is the prerequisite for parallel execution (Pi L489-554): prepare runs sequentially (side-effect safe, immediate failures wrap up first),
- * execute runs concurrently. For how message events are separated from end events, see executeToolCallsParallel in agent-loop.ts.
+ * The two-stage split is the precondition for parallelism (Pi L489-554): prepare is sequential (side-effect safe, immediate failures wrap up first),
+ * execute is concurrent. For how message events are separated from end events, see executeToolCallsParallel in agent-loop.ts.
  */
 import { validateToolArguments } from "../../00-minimal-llm-call/src/index.ts";
 import type {
@@ -54,9 +54,9 @@ export interface ToolResultMessage {
 }
 
 /**
- * Phase 1: prepare (Pi L600-668).
+ * Stage 1: prepare (Pi L600-668).
  * Runs sequentially (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
- * Immediate failures (not found / validation failed / blocked) wrap up here and never enter the concurrent phase.
+ * Immediate failures (not found / validation failed / blocked) wrap up here and don't need to enter the concurrent stage.
  */
 export async function prepareToolCall(
   context: AgentContext,
@@ -85,7 +85,7 @@ export async function prepareToolCall(
     }
   }
 
-  // schema validation (Pi L618)
+  // Schema validation (Pi L618)
   const validation = validateToolArguments(tool, args);
   if (!validation.ok) {
     return immediate(toolCall, `Argument validation failed: ${validation.error}`, false, emit);
@@ -119,8 +119,8 @@ export async function prepareToolCall(
 }
 
 /**
- * Phase 2a: execute + finalize (Pi `executePreparedToolCall` L670-711 + `finalizeExecutedToolCall` L713-758).
- * Wrapped in a thunk for concurrent execution: emits only tool_execution_end (completion order) and no message events (messages are always produced in source order).
+ * Stage 2a: execution + finalize (Pi `executePreparedToolCall` L670-711 + `finalizeExecutedToolCall` L713-758).
+ * Wrapped in a thunk for concurrent execution: it emits only tool_execution_end (completion order) and no message events (messages are all produced in source order).
  */
 export async function executeAndFinalize(
   prepared: PreparedToolCall,
@@ -183,7 +183,7 @@ export async function executeAndFinalize(
   return { toolCall, result, isError };
 }
 
-/** Phase 2b: normalization + message events (Pi `createToolResultMessage` L777-791 + `emitToolResultMessage` L793-796). Called in the assistant's source order. */
+/** Stage 2b: normalization + message events (Pi `createToolResultMessage` L777-791 + `emitToolResultMessage` L793-796). Called in assistant source order. */
 export async function emitToolResultMessage(
   finalized: FinalizedToolOutcome,
   emit: AgentEventSink,
@@ -204,7 +204,7 @@ export async function emitToolResultMessage(
   return { message, terminate: finalized.result.terminate === true };
 }
 
-/** Wrap up an immediate failure: end event + message events (Pi L454-459 sequential path / L508-519 parallel path). */
+/** Immediate failure wrap-up: end event + message events (Pi L454-459 sequential path / L508-519 parallel path). */
 async function immediate(toolCall: ToolCall, text: string, terminate: boolean, emit: AgentEventSink): Promise<ImmediateToolOutcome> {
   const message: Message = {
     role: "toolResult",
@@ -215,7 +215,7 @@ async function immediate(toolCall: ToolCall, text: string, terminate: boolean, e
     ...(terminate ? { terminate: true } : {}),
   };
   // Pi parallel L508-519: immediate emits only end (completion order); message events are emitted in order by the execution path
-  // (sequential: right away in execution order L472-474; parallel: together at the end in source order L543-548)
+  // (sequential: emitted immediately in execution order L472-474; parallel: emitted together in source order at wrap-up L543-548)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result: { content: text }, isError: true });
   return { kind: "immediate", message, terminate };
 }

@@ -2,7 +2,7 @@
  * Chapter 12 product tool: write_file (write a file; Pi blueprint harness/tools/write.ts, 39 lines in full).
  *
  * Mechanisms aligned with Pi:
- * - parameters schema（Pi writeSchema L8-11）：path / content
+ * - parameters schema (Pi writeSchema L8-11): path / content
  * - parent directories are created automatically (Pi description text: Automatically creates parent directories; env.writeFile semantics)
  * - the success receipt carries the byte count (Pi L33: Successfully wrote ${content.length} bytes to ${path})
  * - a write failure throws; the Chapter 01 pipeline turns it into an error toolResult

@@ -5,7 +5,7 @@
  * it is a workflow tool of the Coding Agent product, not a required part of the agent mechanism. This is one of the anchors for Chapter 12's tool layering.
  *
  * Mechanisms aligned with Pi:
- * - parameters schema（Pi grepSchema L24-36）：pattern / path / glob / ignoreCase / literal / context / limit
+ * - parameters schema (Pi grepSchema L24-36): pattern / path / glob / ignoreCase / literal / context / limit
  * - match output format (Pi formatBlock L255-273): `file:line: content`, context lines use `file-line- content`
  * - match limit and hint (Pi L292-296/L344-348): on reaching limit, truncate and suggest refining the pattern
  * - a missing path throws (Pi L186-191: Path not found)
