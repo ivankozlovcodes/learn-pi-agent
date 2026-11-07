@@ -2,13 +2,13 @@
 
 [简体中文](./README.md) | English
 
+> **English translation** of [yiz-hhh/learn-pi-agent](https://github.com/yiz-hhh/learn-pi-agent) by yiz-hhh, which is written in Simplified Chinese. This fork translates the chapters, the documentation site and the code comments into English; all credit for the original content goes to the upstream author.
+
 A learning project that rebuilds the Agent Harness of [Pi](https://github.com/earendil-works/pi) from the ground up.
 
 Pi is a minimal and highly extensible Coding Agent Harness: it does not prescribe a workflow, and the capabilities you need are composed by the user. The project starts from a single LLM call, then gradually adds Tool Calling, Runtime, Context, Sessions, Compaction, Skills, and Extensions before assembling a working Coding Agent.
 
-📖 [Documentation](https://yiz-hhh.github.io/learn-pi-agent/)
-
-> The documentation is currently written in Chinese.
+📖 [Documentation (upstream, Chinese)](https://yiz-hhh.github.io/learn-pi-agent/). The English site in this fork is served under `/en/` (build it with `cd website && npm run docs:build`).
 
 ## Why Pi
 

@@ -2,6 +2,8 @@
 
 简体中文 | [English](./README.en.md)
 
+> This fork is an English translation of [yiz-hhh/learn-pi-agent](https://github.com/yiz-hhh/learn-pi-agent). The Chinese original below is unchanged. See [README.en.md](./README.en.md) for English.
+
 一个从零拆解并重建 [Pi](https://github.com/earendil-works/pi) Agent Harness 的学习项目。
 
 Pi 是一个极简且高度可扩展的 Coding Agent Harness：不预设工作流，需要的能力由使用者自行组合。项目从一次 LLM 调用开始，逐步实现 Tool Calling、Runtime、Context、Session、Compaction、Skills 和 Extensions，最后组装成一个可运行的 Coding Agent。
