@@ -161,12 +161,12 @@ async function runLoop(
         } else {
           const executed = await executeToolCalls(currentContext, assistantMessage, toolCalls, currentConfig, emit, signal);
           for (const result of executed) {
-            toolResults.push(result.message);  // Pi L216-221: tool results go into toolResults (written together + carried by turn_end)
+            toolResults.push(result.message);  // Pi L216-221: tool results go into toolResults (written back in one place + carried by turn_end)
           }
           hasMoreToolCalls = !shouldTerminateToolBatch(executed);
         }
       }
-      // Write history together (Pi L218-221): results from normal execution and from truncation protection both go into context/newMessages
+      // Write back to history in one place (Pi L218-221): results from normal execution and the truncation guard both go into context/newMessages
       for (const result of toolResults) {
         currentContext.messages.push(result);
         newMessages.push(result);
@@ -289,7 +289,7 @@ async function executeToolCalls(
   return executeToolCallsParallel(context, assistantMessage, toolCalls, config, emit, signal);
 }
 
-/** Serial path (same as the previous chapter, Pi L433-487). */
+/** Sequential path (same as the previous chapter, Pi L433-487). */
 async function executeToolCallsSequential(
   context: AgentContext,
   assistantMessage: AssistantMessage,
@@ -302,7 +302,7 @@ async function executeToolCallsSequential(
   for (const toolCall of toolCalls) {
     const prepared = await prepareToolCall(context, assistantMessage, toolCall, config, emit, signal);
     if (prepared.kind === "immediate") {
-      // Pi serial L472-474: immediate already emitted end; message events are emitted immediately in execution order
+      // Pi sequential L472-474: immediate already emitted end; message events are emitted immediately in execution order
       await emit({ type: "message_start", message: { ...prepared.message } });
       await emit({ type: "message_end", message: { ...prepared.message } });
       results.push({ message: prepared.message, terminate: prepared.terminate });
@@ -365,7 +365,7 @@ function shouldTerminateToolBatch(results: ToolResultMessage[]): boolean {
   return results.length > 0 && results.every((r) => r.terminate === true);
 }
 
-/** Error result for truncation protection (same as the previous chapter). */
+/** Error result for the truncation guard (same as the previous chapter). */
 async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Promise<Message> {
   // Pi L387-392: tool_execution_start carries the raw arguments
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });

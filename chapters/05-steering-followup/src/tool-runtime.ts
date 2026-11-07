@@ -55,7 +55,7 @@ export interface ToolResultMessage {
 
 /**
  * Phase 1: prepare (Pi L600-668).
- * Sequential execution (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
+ * Runs sequentially (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
  * Immediate failures (not found / validation failed / blocked) wrap up here and never enter the concurrent phase.
  */
 export async function prepareToolCall(

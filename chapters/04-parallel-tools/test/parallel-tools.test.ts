@@ -72,7 +72,7 @@ class EventRecorder {
 const echo = createEchoTool();
 const calculator = createCalculatorTool();
 
-/** Delayed tool: finishes after executionMs milliseconds. */
+/** Delayed tool: finishes after delayMs milliseconds. */
 function slowTool(name: string, delayMs: number): Tool {
   return {
     name,

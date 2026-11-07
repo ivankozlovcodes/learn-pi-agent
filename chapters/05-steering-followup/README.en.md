@@ -251,7 +251,7 @@ Read it every turn, and a Follow-up that should wait until the run is about to e
 
 Read it only at the end, and Steering can no longer affect the next LLM call in time.
 
-What really needs to be kept here is two different checkpoints.
+What really needs to be kept here are two different checkpoints.
 
 ## Pi's two-level loop
 
@@ -345,7 +345,7 @@ no tool call
 no steering
     ↓
 follow-up:
-  Now calculate 100 minus 40
+  Now calculate 100 - 40
     ↓
 new turn
 ```

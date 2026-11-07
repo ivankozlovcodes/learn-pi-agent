@@ -110,7 +110,7 @@ async function main(): Promise<void> {
   check(loaded.tree.getBranch().map((e) => e.id).join() === branchBPathIds.join(), "after restore, the rebuild = only the branch B path");
   check(loaded.tree.getBranch(branchAReplyId).map((e) => e.id).join() === branchAPathIds.join(), "old branch A can still be rebuilt from its leaf id");
 
-  // Switch back to branch A and continue: the target is an assistant reply (not a user entry) → branch AT, the target stays on the new path
+  // Switch back to branch A and continue: the target is an assistant reply (not a user entry) → branch-at, the target stays on the new path
   console.log("\n[branch A] branch-at continue (target is an assistant reply):");
   tree.branch(branchAReplyId);
   await runTurn(tree, "Good. Now what is 5 * 3?");

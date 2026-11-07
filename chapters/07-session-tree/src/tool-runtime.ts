@@ -7,7 +7,7 @@
  * - `executePreparedToolCall` (L670-711) + `finalizeExecutedToolCall` (L713-758):
  *   execute + onUpdate + afterToolCall, producing a FinalizedToolCallOutcome
  *
- * The two-phase split is a precondition for parallel execution (Pi L489-554): prepare runs serially (side-effect safe, immediate failures wrap up first),
+ * The two-phase split is a precondition for parallel execution (Pi L489-554): prepare runs sequentially (side-effect safe, immediate failures wrap up first),
  * execute runs concurrently. For the separation of message events and end events, see executeToolCallsParallel in agent-loop.ts.
  */
 import { validateToolArguments } from "../../00-minimal-llm-call/src/index.ts";
@@ -55,7 +55,7 @@ export interface ToolResultMessage {
 
 /**
  * Phase 1: prepare (Pi L600-668).
- * Runs serially (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
+ * Runs sequentially (whether or not execution ends up parallel): lookup → argument compatibility → validation → beforeToolCall.
  * Immediate failures (not found/validation failed/blocked) wrap up here and never enter the concurrent phase.
  */
 export async function prepareToolCall(
@@ -210,7 +210,7 @@ export async function emitToolResultMessage(
   return { message, terminate: finalized.result.terminate === true };
 }
 
-/** Wrap up an immediate failure: end event + message event (Pi L454-459 serial path / L508-519 parallel path). */
+/** Wrap up an immediate failure: end event + message event (Pi L454-459 sequential path / L508-519 parallel path). */
 async function immediate(toolCall: ToolCall, text: string, terminate: boolean, emit: AgentEventSink): Promise<ImmediateToolOutcome> {
   const message: Message = {
     role: "toolResult",
@@ -221,7 +221,7 @@ async function immediate(toolCall: ToolCall, text: string, terminate: boolean, e
     ...(terminate ? { terminate: true } : {}),
   };
   // Pi parallel L508-519: immediate emits only end (completion order); the execution path emits message events in order
-  // (serial: emitted immediately in execution order L472-474; parallel: emitted together in source order at wrap-up L543-548)
+  // (sequential: emitted immediately in execution order L472-474; parallel: emitted together in source order at wrap-up L543-548)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result: { content: text }, isError: true });
   return { kind: "immediate", message, terminate };
 }

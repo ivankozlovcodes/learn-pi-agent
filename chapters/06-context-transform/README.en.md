@@ -201,7 +201,7 @@ A real Context strategy also has to understand message boundaries.
 
 ## Why not let the Loop manage the Context strategy directly
 
-Context handling easily keeps growing more rules.
+Context handling tends to keep growing new rules.
 
 Some only want to keep the last few turns:
 
@@ -355,4 +355,4 @@ But `context.messages` is still a single linear array.
 
 If after a run ends we want to restore an old session, or branch off a new execution path from some point in the history, this array alone isn't enough.
 
-Chapter 07 continues from this problem.
+Chapter 07 picks up from this problem.

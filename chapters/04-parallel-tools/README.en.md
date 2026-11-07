@@ -294,7 +294,7 @@ B
 terminate = true
 ```
 
-A and C are not cancelled immediately because of it.
+A and C are not canceled immediately because of it.
 
 The Runtime keeps waiting for the current batch to finish.
 
@@ -333,7 +333,7 @@ it moves on to the next turn.
 
 `terminate` expresses the Tool Result's suggestion for the rest of the Loop.
 
-Cancelling a Tool that is still executing remains the kind of control that belongs to `AbortSignal`.
+Canceling a Tool that is still executing is still a job for controls like `AbortSignal`.
 
 Run:
 
