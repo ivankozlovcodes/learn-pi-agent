@@ -27,7 +27,7 @@ That makes Pi a useful system for studying Agent Harness design: the core mechan
 | [04 · Parallel Tool Execution](./chapters/04-parallel-tools) | Parallel Tools, completion order, and message order |
 | [05 · Steering & Follow-up](./chapters/05-steering-followup) | New input during a run and Follow-up |
 | [06 · Context Transformation](./chapters/06-context-transform) | Runtime History and per-call LLM Context |
-| [07 · Session Tree](./chapters/07-session-tree) | Session persistence, branching, and recovery |
+| [07 · Session Tree](./chapters/07-session-tree) | Session persistence, branching, and restoring |
 | [08 · Context Compaction](./chapters/08-context-compaction) | CompactionEntry and Context Reconstruction |
 | [09 · Skills](./chapters/09-skills) | Skill Discovery and on-demand loading |
 | [10 · Extension Runtime](./chapters/10-extension-runtime) | Loading, registering, and running Extensions |

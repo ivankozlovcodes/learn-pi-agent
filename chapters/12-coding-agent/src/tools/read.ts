@@ -11,7 +11,7 @@
  * - image reading (Pi L56-95: mime detection + base64 attachment) is not taught; text-only tool
  * - the env abstraction (Pi ExecutionEnv.readBinaryFile, swappable for a remote backend) is simplified to direct fs calls
  * - truncation limits are the teaching choice of 500 lines / 64KB (Pi actually uses DEFAULT_MAX_LINES=2000, DEFAULT_MAX_BYTES=50KB,
- *   harness/utils/truncate.ts L11-12; values chosen for teaching, not Pi's halved)
+ *   harness/utils/truncate.ts L11-12; values chosen for teaching, not a halving of Pi's)
  */
 import { readFile } from "node:fs/promises";
 import type { Tool } from "../../../00-minimal-llm-call/src/index.ts";

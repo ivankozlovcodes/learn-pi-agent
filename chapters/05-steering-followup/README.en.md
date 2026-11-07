@@ -358,4 +358,4 @@ At this point, the input of a run is no longer decided only by the batch of mess
 
 Before the next model call, what else can the Runtime do with the Context it has built up?
 
-Chapter 06 picks up from this question.
+Chapter 06 picks up from this problem.
