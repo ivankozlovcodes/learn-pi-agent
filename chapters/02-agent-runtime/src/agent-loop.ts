@@ -1,30 +1,30 @@
 /**
- * 02 章增量：完整 Agent Runtime——在 01 最小循环上补全 Pi `runLoop` + `streamAssistantResponse` 的全部核心机制。
+ * Chapter 02 delta: the full Agent Runtime. On top of the minimal loop from 01, it fills in all the core mechanisms of Pi `runLoop` + `streamAssistantResponse`.
  *
- * 相对 01 章的变化（全部锚定 Pi，行号基于 pinned commit）：
- * - 事件模型：agent/turn/message 三类事件，含流式专用 `message_update`（Pi `AgentEvent` types.ts L428-443）
- * - **流式增量消费**：partial 快照替换 context 末条（L335-343）+ message_update（L438）——
- *   01 章「只取 done」升级为完整消费（start → 增量 → done）
- * - stopReason 显式化（end_turn/tool_use/length/error/aborted）+ errorMessage 文本
- * - 终止①②：error/aborted 立即停（L196-200）/ 无 tool call 结束（L216+L274）
- * - newMessages 增量语义与 context 快照隔离（L103/L104-107）
- * - 截断保护：length 时工具全部判错不执行（L208-213+L381-406）
- * - `agentLoop` 顶层入口：EventStream 封装（L31-54 + createAgentStream L145-150）
- * - AbortSignal：中断 → stopReason aborted → 终止①
+ * Changes relative to Chapter 01 (all anchored to Pi; line numbers are from the pinned commit):
+ * - Event model: three kinds of events (agent/turn/message), including the streaming-only `message_update` (Pi `AgentEvent` types.ts L428-443)
+ * - **Streaming delta consumption**: the partial snapshot replaces the last context entry (L335-343) + message_update (L438).
+ *   Chapter 01 "only takes done"; this upgrades it to full consumption (start → deltas → done)
+ * - Explicit stopReason (end_turn/tool_use/length/error/aborted) + errorMessage text
+ * - Termination ①②: error/aborted stops immediately (L196-200) / no tool call ends the run (L216+L274)
+ * - newMessages delta semantics and context snapshot isolation (L103/L104-107)
+ * - Truncation guard: on length, every tool call is marked as an error and not executed (L208-213+L381-406)
+ * - `agentLoop` top-level entry: EventStream wrapper (L31-54 + createAgentStream L145-150)
+ * - AbortSignal: abort → stopReason aborted → termination ①
  *
- * 剪裁（章节归属）：steering/follow-up→05、并行→04、tool 事件与参数校验→03、
- * shouldStopAfterTurn/prepareNextTurn/transformContext/getApiKey→06。
+ * Trimmed (chapter ownership): steering/follow-up→05, parallel→04, tool events and argument validation→03,
+ * shouldStopAfterTurn/prepareNextTurn/transformContext/getApiKey→06.
  */
 import { EventStream, type LLMAdapter } from "../../00-minimal-llm-call/src/index.ts";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AssistantMessage, AssistantMessageEvent, Message, ToolCall } from "../../00-minimal-llm-call/src/index.ts";
 
-/** 事件输出：Pi `AgentEventSink`（agent-loop.ts L25）。 */
+/** Event output: Pi `AgentEventSink` (agent-loop.ts L25). */
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
 /**
- * 顶层入口：创建 EventStream 并后台启动 runAgentLoop。
- * 对应 Pi `agentLoop`（L31-54）+ `createAgentStream`（L145-150）：
- * 结束信号 = agent_end 事件；结果 = 事件携带的 newMessages。
+ * Top-level entry: creates the EventStream and starts runAgentLoop in the background.
+ * Corresponds to Pi `agentLoop` (L31-54) + `createAgentStream` (L145-150):
+ * end signal = the agent_end event; result = the newMessages carried by that event.
  */
 export function agentLoop(
   prompts: Message[],
@@ -38,22 +38,22 @@ export function agentLoop(
     (event) => (event.type === "agent_end" ? event.messages : []),
   );
 
-  // Pi L40-51：后台运行，结束时 stream.end(messages) 传递结果；
-  // agent_end 事件本身由 runLoop 内 emit 发出（不会重复）
+  // Pi L40-51: runs in the background and passes the result through stream.end(messages) at the end;
+  // the agent_end event itself is emitted by emit inside runLoop (not duplicated)
   void runAgentLoop(prompts, context, config, llm, (event) => stream.push(event), signal)
     .then((messages) => {
       stream.end(messages);
     })
     .catch((error: unknown) => {
-      // 循环内钩子/流异常不应让消费者永久挂起：结束流并留痕（错误编码进流的契约不覆盖钩子）
-      console.error("agent 运行失败:", error instanceof Error ? error.message : String(error));
+      // A hook/stream exception inside the loop must not leave consumers hanging forever: end the stream and leave a trace (the errors-encoded-in-the-stream contract does not cover hooks)
+      console.error("agent run failed:", error instanceof Error ? error.message : String(error));
       stream.end([]);
     });
 
   return stream;
 }
 
-/** 启动一次 agent run：newMessages 只含本轮新增；context 快照隔离（Pi L103-107）。 */
+/** Starts one agent run: newMessages holds only what this run adds; context snapshot isolation (Pi L103-107). */
 export async function runAgentLoop(
   prompts: Message[],
   context: AgentContext,
@@ -62,9 +62,9 @@ export async function runAgentLoop(
   emit: AgentEventSink,
   signal?: AbortSignal,
 ): Promise<Message[]> {
-  // 空 prompts 守卫——继续请用 runAgentLoopContinue（Pi L120-143），空数组会让 LLM 无提示续写或 400
+  // Empty prompts guard: to continue, use runAgentLoopContinue (Pi L120-143); an empty array makes the LLM continue without a prompt or return 400
   if (prompts.length === 0) {
-    throw new Error("prompts 不能为空：继续已有会话请用 continue 语义（07 章 runAgentLoopContinue）");
+    throw new Error("prompts must not be empty: to continue an existing session, use continue semantics (Chapter 07 runAgentLoopContinue)");
   }
   const newMessages: Message[] = [...prompts];
   const currentContext: AgentContext = {
@@ -72,11 +72,11 @@ export async function runAgentLoop(
     messages: [...context.messages, ...prompts],
   };
 
-  // Pi L109-114：agent 生命周期开始 + 首个 turn + prompts 消息事件
+  // Pi L109-114: agent lifecycle start + first turn + message events for the prompts
   await emit({ type: "agent_start" });
   await emit({ type: "turn_start" });
   for (const prompt of prompts) {
-    // 快照：message 事件 payload 统一浅拷贝，消费者改动不影响内部 history
+    // Snapshot: message event payloads are always shallow copies, so consumer changes do not affect the internal history
     await emit({ type: "message_start", message: { ...prompt } });
     await emit({ type: "message_end", message: { ...prompt } });
   }
@@ -85,7 +85,7 @@ export async function runAgentLoop(
   return newMessages;
 }
 
-/** 主循环：单层循环（Pi 内层 L174-260，剪裁 steering）。 */
+/** Main loop: a single-level loop (Pi inner loop L174-260, steering trimmed). */
 async function runLoop(
   context: AgentContext,
   newMessages: Message[],
@@ -95,7 +95,7 @@ async function runLoop(
   signal?: AbortSignal,
 ): Promise<void> {
   let hasMoreToolCalls = true;
-  let firstTurn = true;  // Pi L175-179：首轮 turn_start 由 runAgentLoop 发出
+  let firstTurn = true;  // Pi L175-179: the first turn_start is emitted by runAgentLoop
 
   while (hasMoreToolCalls) {
     if (firstTurn) {
@@ -104,11 +104,11 @@ async function runLoop(
       await emit({ type: "turn_start" });
     }
 
-    // 流式完整消费：Pi L193 streamAssistantResponse（L281-372）
+    // Full streaming consumption: Pi L193 streamAssistantResponse (L281-372)
     const assistantMessage = await streamAssistantResponse(context, config, llm, emit, signal);
     newMessages.push(assistantMessage);
 
-    // 终止①：Pi L196-200（error/aborted → turn_end + agent_end 立即返回）
+    // Termination ①: Pi L196-200 (error/aborted → turn_end + agent_end, return immediately)
     if (assistantMessage.stopReason === "error" || assistantMessage.stopReason === "aborted") {
       await emit({ type: "turn_end", message: assistantMessage, toolResults: [] });
       await emit({ type: "agent_end", messages: newMessages });
@@ -121,17 +121,17 @@ async function runLoop(
 
     if (toolCalls.length > 0) {
       if (assistantMessage.stopReason === "length") {
-        // 截断保护：Pi L208-213 + L381-406（流式参数可能残缺，全部判错）
+        // Truncation guard: Pi L208-213 + L381-406 (streamed arguments may be incomplete, so all are marked as errors)
         for (const toolCall of toolCalls) {
           toolResults.push(await truncatedToolResult(toolCall, emit));
         }
-        // Pi L216：截断批 terminate=false → 继续循环，模型基于错误结果重发完整参数
+        // Pi L216: truncated batch terminate=false → keep looping; the model re-issues complete arguments based on the error results
         hasMoreToolCalls = true;
       } else {
-        // 串行执行：Pi executeToolCallsSequential（L433-487）
+        // Sequential execution: Pi executeToolCallsSequential (L433-487)
         for (const toolCall of toolCalls) {
           toolResults.push(await executeToolCall(context, toolCall, emit, signal));
-          // Pi L478-480：abort 后 break，不再执行剩余工具
+          // Pi L478-480: break after abort, do not execute the remaining tools
           if (signal?.aborted) {
             break;
           }
@@ -145,20 +145,20 @@ async function runLoop(
       }
     }
 
-    // Pi L224：turn 结束
+    // Pi L224: turn ends
     await emit({ type: "turn_end", message: assistantMessage, toolResults });
   }
 
-  // 终止②：无工具调用 → agent_end（Pi L274；Pi 在退出前检查 follow-up，05 章引入）
+  // Termination ②: no tool calls → agent_end (Pi L274; Pi checks follow-up before exiting, introduced in Chapter 05)
   await emit({ type: "agent_end", messages: newMessages });
 }
 
 /**
- * 流式 assistant 响应：完整消费流事件，维护 partial 快照。
- * 对应 Pi `streamAssistantResponse`（L281-372）：
- * - start：partial 入 context + message_start（L319-324）
- * - 增量（text/toolcall）：partial **替换** context 末条 + message_update（L335-343）——01 章只取 done，本章开始处理增量
- * - done：最终消息落定 + message_end（L346-359）
+ * Streaming assistant response: fully consumes the stream events and maintains the partial snapshot.
+ * Corresponds to Pi `streamAssistantResponse` (L281-372):
+ * - start: partial goes into context + message_start (L319-324)
+ * - deltas (text/toolcall): partial **replaces** the last context entry + message_update (L335-343). Chapter 01 only took done; this chapter starts handling deltas
+ * - done: the final message is settled + message_end (L346-359)
  */
 async function streamAssistantResponse(
   context: AgentContext,
@@ -206,16 +206,16 @@ async function streamAssistantResponse(
           context.messages.push(finalMessage);
           await emit({ type: "message_start", message: { ...finalMessage } });
         }
-        await emit({ type: "message_end", message: { ...finalMessage } });  // 快照：message 事件 payload 统一浅拷贝
+        await emit({ type: "message_end", message: { ...finalMessage } });  // Snapshot: message event payloads are always shallow copies
         return finalMessage;
       }
     }
   }
 
-  throw new Error("LLM 流未以 done 事件结束");
+  throw new Error("LLM stream did not end with a done event");
 }
 
-/** 执行单个工具调用并构造 toolResult 消息（Pi L600-668/L670-711/L777-791；消息事件对应 emitToolResultMessage L793-796）。 */
+/** Executes a single tool call and builds the toolResult message (Pi L600-668/L670-711/L777-791; the message events correspond to emitToolResultMessage L793-796). */
 async function executeToolCall(context: AgentContext, toolCall: ToolCall, emit: AgentEventSink, signal?: AbortSignal): Promise<Message> {
   const tool = context.tools?.find((t) => t.name === toolCall.name);
   let resultMessage: Message;
@@ -229,7 +229,7 @@ async function executeToolCall(context: AgentContext, toolCall: ToolCall, emit: 
     };
   } else {
     try {
-      // Pi L679-682：signal 透传给工具 execute（长任务可自行中止）
+      // Pi L679-682: signal is passed through to the tool execute (long tasks can abort on their own)
       const result = await tool.execute(toolCall.arguments as never, undefined, signal);
       resultMessage = { role: "toolResult", toolCallId: toolCall.id, toolName: toolCall.name, text: result.content, isError: false };
     } catch (error) {
@@ -242,15 +242,15 @@ async function executeToolCall(context: AgentContext, toolCall: ToolCall, emit: 
       };
     }
   }
-  // 快照：message 事件 payload 统一浅拷贝（resultMessage 随后进入 context，共享引用会让消费者改动污染历史）
+  // Snapshot: message event payloads are always shallow copies (resultMessage then goes into context; a shared reference would let consumer changes pollute the history)
   await emit({ type: "message_start", message: { ...resultMessage } });
   await emit({ type: "message_end", message: { ...resultMessage } });
   return resultMessage;
 }
 
-/** 截断保护的错误结果（Pi failToolCallsFromTruncatedMessage L381-406 的消息形状）。 */
+/** Error result for the truncation guard (message shape of Pi failToolCallsFromTruncatedMessage L381-406). */
 async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Promise<Message> {
-  // Pi L387-392：tool_execution_start 携带原始参数
+  // Pi L387-392: tool_execution_start carries the original arguments
   await emit({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args: toolCall.arguments });
   const message: Message = {
     role: "toolResult",
@@ -259,7 +259,7 @@ async function truncatedToolResult(toolCall: ToolCall, emit: AgentEventSink): Pr
     text: `Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`,
     isError: true,
   };
-  // Pi L400-403：tool_execution_end + 消息事件（浅拷贝，消费者改动不污染内部历史）
+  // Pi L400-403: tool_execution_end + message events (shallow copies, so consumer changes do not pollute the internal history)
   await emit({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result: { content: message.text ?? "" }, isError: true });
   await emit({ type: "message_start", message: { ...message } });
   await emit({ type: "message_end", message: { ...message } });
