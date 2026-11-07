@@ -78,6 +78,25 @@ Keep the source's casing. The source mixes `Tool Result` (concept) with `toolRes
 | 参数校验失败 | Argument validation failed | |
 | 缺少必填参数 | Missing required argument | 00/src/validate.ts |
 | 操作已中止 | Operation aborted | 00/src/llm.ts |
+| 回合 / 回合开始 / 回合结束 | turn / turn start / turn end | lowercase in demo output |
+| 兜底 | fallback | |
+| 容错 | fault tolerance | |
+| 截断保护 | truncation guard | |
+| 规范化 | normalize / normalization | |
+| 透传 | pass-through | |
+| 落盘 | persist to disk | |
+| 快照隔离 | snapshot isolation | |
+| 字段级改写 | field-level override | |
+| 兼容层 | compatibility layer | |
+| 生命周期事件 | lifecycle events | |
+| 终止语义 | termination semantics | |
+| 串行执行 | sequential execution | |
+| 孤儿 entry | orphan entry | |
+| 参数转换失败 | Argument conversion failed | |
+| 工具执行被阻止 | Tool execution blocked | |
+| 建议停止 | suggests stopping | |
+| 最终回复 / 演示失败 | Final reply / Demo failed: | demo output |
+| 脚手架 | scaffold | |
 | 本章目录 / 上一章 / 下一章 | On this page / Previous chapter / Next chapter | site UI |
 
 ## Punctuation and typography

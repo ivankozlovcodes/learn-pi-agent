@@ -1,6 +1,6 @@
 # Chapter lane brief
 
-Repo: learn-pi-agent, a Chinese teaching monorepo that rebuilds the Pi agent harness, being translated into English. You work in your own git worktree on the lane for chapter **{{CH}}** (given in your task message; substitute it below). Set up node first: `export PATH=$HOME/.local/share/pi-node/current/bin:$PATH`, then run `npm ci` at the repo root (needed for tests).
+Repo: learn-pi-agent, a Chinese teaching monorepo that rebuilds the Pi agent harness, being translated into English. You work in your own git worktree on the lane for chapter **{{CH}}** (given in your task message; substitute it below). Set up node first: `export PATH=$HOME/.local/share/pi-node/current/bin:$PATH`. **Do NOT run `npm ci` / `npm install`**: your worktree's `node_modules` is a symlink to the main checkout, and reinstalling wipes it for every other lane. If `tsc` or `vitest` is missing, stop and report it.
 
 Read first and follow exactly: `translation/STYLE.md` and `translation/GLOSSARY.md`.
 

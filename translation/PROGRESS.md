@@ -28,16 +28,16 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 | tooling | translation/check-*.mjs, residue-allowlist, fixtures | merged | ff7f7cc→cherry-picked |
 | site | website/.vitepress/**, website/components/**, website/en/index.md, website/scripts/sync-readmes.mjs, website/public/og-cover-en.svg, website/package.json, package.json (description) | merged | 1ed499f |
 | 00 | chapters/00-minimal-llm-call/** (+ downstream assertion lines) | merged | 4c661a2 |
-| 01 | chapters/01-tool-driven-agent/** | running | |
-| 02 | chapters/02-agent-runtime/** | running | |
-| 03 | chapters/03-tool-runtime/** | running | |
-| 04 | chapters/04-parallel-tools/** | pending | |
-| 05 | chapters/05-steering-followup/** | pending | |
-| 06 | chapters/06-context-transform/** | pending | |
-| 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | running | |
+| 01 | chapters/01-tool-driven-agent/** | merged | add3e34 |
+| 02 | chapters/02-agent-runtime/** | merged | 47c7b3f |
+| 03 | chapters/03-tool-runtime/** | merged | f09c02d |
+| 04 | chapters/04-parallel-tools/** | running | |
+| 05 | chapters/05-steering-followup/** | running | |
+| 06 | chapters/06-context-transform/** | running | |
+| 07 | chapters/07-session-tree/** (+ downstream assertion lines in 10–12) | merged | fbe8675 |
 | 08 | chapters/08-context-compaction/** | pending | |
 | 09 | chapters/09-skills/** | pending | |
-| 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | pending | |
+| 10 | chapters/10-extension-runtime/** (+ downstream assertion lines in 11–12) | running | |
 | 11 | chapters/11-extension-composition/** (+ downstream assertion lines in 12) | pending | |
 | 12 | chapters/12-coding-agent/** | pending | |
 | root | README.en.md alignment + upstream credit (parent, Phase 4) | pending | |
@@ -46,4 +46,7 @@ Every chapter imports `00-minimal-llm-call/src`. 10 and 11 import 07; 11 imports
 none
 
 ## Next action
-01, 02, 03, 07 running. Next, as slots free: 04, 05, 06, 08, 09 as slots free; 10 after 07; 11 after 10; 12 after 11.
+04, 05, 06, 10 running. Then 08, 09 as slots free; 11 after 10; 12 after 11.
+
+## Notes
+- Lanes must not run `npm ci`: worktree `node_modules` symlinks to the main checkout (it was wiped once and restored; after 01–03 + 07 the full suite is green, 211 tests).
